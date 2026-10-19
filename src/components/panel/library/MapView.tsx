@@ -13,6 +13,7 @@ import {
   PanelRightOpen,
   CheckCircle2,
   GripVertical,
+  Undo2,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useTranslation } from 'react-i18next';
@@ -158,7 +159,7 @@ function createCustomPin(isSelected: boolean, isRaw: boolean): L.DivIcon {
   const html = `
     <div style="${glow} transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${
       isSelected ? 'scale(1.25)' : 'scale(1)'
-    }; cursor: grab;">
+    }; cursor: pointer;">
       <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M14 0C6.268 0 0 6.268 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.268 21.732 0 14 0Z" fill="${primaryColor}"/>
         <circle cx="14" cy="14" r="11" fill="#0f172a"/>
@@ -184,7 +185,7 @@ function createThumbnailLoadingPin(isSelected: boolean, isRaw: boolean, _filenam
   const scale = isSelected ? 'scale(1.15)' : 'scale(1)';
 
   const html = `
-    <div style="position: relative; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${scale}; cursor: grab; display: flex; flex-direction: column; align-items: center;">
+    <div style="position: relative; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${scale}; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
       <div style="
         width: 96px;
         height: 96px;
@@ -237,7 +238,7 @@ function createPhotoThumbnailPin(
   const scale = isSelected ? 'scale(1.15)' : 'scale(1)';
 
   const html = `
-    <div style="position: relative; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${scale}; cursor: grab; display: flex; flex-direction: column; align-items: center;">
+    <div style="position: relative; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${scale}; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
       <div style="
         width: 96px;
         height: 96px;
@@ -278,11 +279,21 @@ function createPhotoThumbnailPin(
   });
 }
 
-function createClusterThumbnailPin(thumbnailUrl: string, count: number): L.DivIcon {
-  const countLabel = count > 999 ? '999+' : count.toString();
+function createClusterThumbnailPin(
+  thumbnailUrl: string,
+  count: number,
+  clusterId?: number,
+  activeIndex?: number,
+): L.DivIcon {
+  const countLabel =
+    activeIndex !== undefined
+      ? `${activeIndex + 1}/${count}`
+      : count > 999
+        ? '999+'
+        : count.toString();
 
   const html = `
-    <div style="position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+    <div data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
       <!-- Stack background card 2 (bottom layer) -->
       <div style="
         position: absolute;
@@ -356,7 +367,7 @@ function createClusterThumbnailPin(thumbnailUrl: string, count: number): L.DivIc
             <polyline points="2 17 12 22 22 17"/>
             <polyline points="2 12 12 17 22 12"/>
           </svg>
-          <span>${countLabel}</span>
+          <span data-cluster-badge>${countLabel}</span>
         </div>
       </div>
 
@@ -380,11 +391,16 @@ function createClusterThumbnailPin(thumbnailUrl: string, count: number): L.DivIc
   });
 }
 
-function createClusterLoadingPin(count: number): L.DivIcon {
-  const countLabel = count > 999 ? '999+' : count.toString();
+function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?: number): L.DivIcon {
+  const countLabel =
+    activeIndex !== undefined
+      ? `${activeIndex + 1}/${count}`
+      : count > 999
+        ? '999+'
+        : count.toString();
 
   const html = `
-    <div style="position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+    <div data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
       <!-- Stack background card 2 -->
       <div style="
         position: absolute;
@@ -457,7 +473,7 @@ function createClusterLoadingPin(count: number): L.DivIcon {
             <polyline points="2 17 12 22 22 17"/>
             <polyline points="2 12 12 17 22 12"/>
           </svg>
-          <span>${countLabel}</span>
+          <span data-cluster-badge>${countLabel}</span>
         </div>
       </div>
 
@@ -481,11 +497,11 @@ function createClusterLoadingPin(count: number): L.DivIcon {
   });
 }
 
-function createCompactClusterPin(count: number): L.DivIcon {
+function createCompactClusterPin(count: number, clusterId?: number): L.DivIcon {
   const countLabel = count > 999 ? '999+' : count.toString();
   const c = count < 10 ? 'small' : count < 100 ? 'medium' : 'large';
   return L.divIcon({
-    html: `<div><span>${countLabel}</span></div>`,
+    html: `<div data-cluster-id="${clusterId ?? ''}"><span>${countLabel}</span></div>`,
     className: `marker-cluster marker-cluster-${c}`,
     iconSize: new L.Point(40, 40),
   });
@@ -495,7 +511,6 @@ function buildPopupHtml(
   photo: MapPhotoItem,
   thumbUrl: string | undefined,
   dblClickHint: string,
-  removeGpsText: string,
   revertGpsText: string,
   dragHintText: string,
 ): string {
@@ -552,25 +567,13 @@ function buildPopupHtml(
           ${dblClickHint}
         </span>
         <div style="display: flex; align-items: center; gap: 6px;">
-          ${
-            photo.hasNativeGps && photo.isGpsModified
-              ? `<button
-                   data-action="revert-gps"
-                   data-path="${photo.path}"
-                   style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;"
-                   title="${revertGpsText}"
-                 >
-                   ↺ ${revertGpsText}
-                 </button>`
-              : ''
-          }
           <button
-            data-action="remove-gps"
+            data-action="revert-gps"
             data-path="${photo.path}"
-            style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;"
-            title="${removeGpsText}"
+            style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;"
+            title="${revertGpsText}"
           >
-            🗑️ ${removeGpsText}
+            ↺ ${revertGpsText}
           </button>
         </div>
       </div>
@@ -585,7 +588,6 @@ interface PhotoClusterLayerProps {
   onSelectPhoto: (path: string, event: MouseEvent) => void;
   onDoubleClickPhoto: (path: string) => void;
   onContextMenuPhoto: (event: MouseEvent, path: string) => void;
-  onRemoveGps?: (path: string) => void;
   onRevertGps?: (path: string) => void;
   onMovePhoto?: (path: string, lat: number, lon: number) => void;
   onMapContextMenu?: (lat: number, lon: number, screenX: number, screenY: number) => void;
@@ -600,7 +602,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   onSelectPhoto,
   onDoubleClickPhoto,
   onContextMenuPhoto,
-  onRemoveGps,
   onRevertGps,
   onMovePhoto,
   onMapContextMenu,
@@ -610,12 +611,29 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   const map = useMap();
   const [cluster, setCluster] = useState<L.MarkerClusterGroup | null>(null);
   const markersMapRef = useRef<Map<string, L.Marker>>(new Map());
+  const clustersMapRef = useRef<Map<number, L.MarkerCluster>>(new Map());
+  const isWheelSelectingRef = useRef<boolean>(false);
   const hasInitialFitRef = useRef<boolean>(false);
   const prevSelectedPathRef = useRef<string | null>(null);
   const hasZoomedToInitialRef = useRef<boolean>(false);
   const prevThumbnailsKeysRef = useRef<Set<string>>(new Set());
   const thumbnails = useProcessStore((s) => s.thumbnails);
   const { t } = useTranslation();
+
+  const selectedPathRef = useRef<string | null>(selectedPath);
+  useEffect(() => {
+    selectedPathRef.current = selectedPath;
+  }, [selectedPath]);
+
+  const onRequestThumbnailsRef = useRef(onRequestThumbnails);
+  useEffect(() => {
+    onRequestThumbnailsRef.current = onRequestThumbnails;
+  }, [onRequestThumbnails]);
+
+  const onSelectPhotoRef = useRef(onSelectPhoto);
+  useEffect(() => {
+    onSelectPhotoRef.current = onSelectPhoto;
+  }, [onSelectPhoto]);
 
   const showThumbnailCardsRef = useRef<boolean>(showThumbnailCards);
   useEffect(() => {
@@ -631,20 +649,12 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   const dblClickHint = t('library.map.doubleClickHint', {
     defaultValue: 'Double click to open in Adjustments mode',
   });
-  const removeGpsText = t('library.map.removeGps', {
-    defaultValue: 'Remove GPS',
-  });
-  const revertGpsText = t('library.map.revertGps', {
-    defaultValue: 'Revert to camera GPS',
+  const revertGpsText = t('library.map.revertGpsData', {
+    defaultValue: 'Revert GPS data',
   });
   const dragHintText = t('library.map.dragToReposition', {
     defaultValue: 'Drag pin to reposition',
   });
-
-  const onRemoveGpsRef = useRef(onRemoveGps);
-  useEffect(() => {
-    onRemoveGpsRef.current = onRemoveGps;
-  }, [onRemoveGps]);
 
   const onRevertGpsRef = useRef(onRevertGps);
   useEffect(() => {
@@ -661,23 +671,81 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     onMapContextMenuRef.current = onMapContextMenu;
   }, [onMapContextMenu]);
 
-  // Attach popup click handler for removing GPS and map contextmenu handler
+  // Round-robin mouse wheel photo cycling on clusters
+  useEffect(() => {
+    const container = map.getContainer();
+
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      const clusterEl = target?.closest('[data-cluster-id]') as HTMLElement | null;
+      if (!clusterEl) return;
+
+      const clusterIdStr = clusterEl.getAttribute('data-cluster-id');
+      if (!clusterIdStr) return;
+
+      const clusterId = Number(clusterIdStr);
+      const clusterMarker = clustersMapRef.current.get(clusterId);
+      if (!clusterMarker) return;
+
+      const childMarkers = clusterMarker.getAllChildMarkers();
+      if (!childMarkers || childMarkers.length <= 1) return;
+
+      const childPhotos: string[] = childMarkers
+        .map((m: any) => m.photoPath as string)
+        .filter(Boolean);
+
+      if (childPhotos.length <= 1) return;
+
+      // Intercept wheel on cluster so the map does NOT zoom
+      e.preventDefault();
+      e.stopPropagation();
+
+      let currentIdx = (clusterMarker as any)._activePhotoIndex ?? -1;
+      if (currentIdx === -1 && selectedPathRef.current) {
+        currentIdx = childPhotos.indexOf(selectedPathRef.current);
+      }
+      if (currentIdx === -1) {
+        currentIdx = 0;
+      }
+
+      const direction = e.deltaY > 0 ? 1 : -1;
+      const nextIdx = (currentIdx + direction + childPhotos.length) % childPhotos.length;
+      (clusterMarker as any)._activePhotoIndex = nextIdx;
+      const nextPath = childPhotos[nextIdx];
+
+      if (onRequestThumbnailsRef.current) {
+        onRequestThumbnailsRef.current([nextPath]);
+      }
+
+      // Update cluster thumbnail & badge directly in DOM for instant response
+      const imgEl = clusterEl.querySelector('img');
+      const thumbs = useProcessStore.getState().thumbnails;
+      if (imgEl && thumbs[nextPath]) {
+        imgEl.src = thumbs[nextPath];
+      }
+      const badgeEl = clusterEl.querySelector('[data-cluster-badge]');
+      if (badgeEl) {
+        badgeEl.textContent = `${nextIdx + 1}/${childPhotos.length}`;
+      }
+
+      isWheelSelectingRef.current = true;
+      onSelectPhotoRef.current(nextPath, new MouseEvent('click'));
+      setTimeout(() => {
+        isWheelSelectingRef.current = false;
+      }, 150);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    return () => {
+      container.removeEventListener('wheel', handleWheel, { capture: true } as any);
+    };
+  }, [map]);
+
+  // Attach popup click handler for reverting GPS and map contextmenu handler
   useEffect(() => {
     const handlePopupOpen = (e: L.PopupEvent) => {
       const el = e.popup.getElement();
       if (!el) return;
-      const btnRemove = el.querySelector<HTMLButtonElement>('[data-action="remove-gps"]');
-      if (btnRemove) {
-        btnRemove.onclick = (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          const p = btnRemove.getAttribute('data-path');
-          if (p && onRemoveGpsRef.current) {
-            onRemoveGpsRef.current(p);
-            map.closePopup();
-          }
-        };
-      }
       const btnRevert = el.querySelector<HTMLButtonElement>('[data-action="revert-gps"]');
       if (btnRevert) {
         btnRevert.onclick = (ev) => {
@@ -715,36 +783,54 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
-      maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
-      spiderfyDistanceMultiplier: 2.2,
+      maxClusterRadius: 60,
+      spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
-      zoomToBoundsOnClick: false, // We control the click behavior predictably below
-      disableClusteringAtZoom: 17,
+      zoomToBoundsOnClick: false,
       iconCreateFunction: (c: L.MarkerCluster) => {
         const count = c.getChildCount();
-        if (!showThumbnailCardsRef.current) {
-          return createCompactClusterPin(count);
-        }
+        const clusterId = (c as any)._leaflet_id;
+        clustersMapRef.current.set(clusterId, c);
 
         const childMarkers = c.getAllChildMarkers();
-        const currentThumbs = useProcessStore.getState().thumbnails;
+        const childPaths = childMarkers
+          .map((m: any) => m.photoPath as string)
+          .filter(Boolean);
 
-        // 1. High performance: prioritize any photo in cluster that ALREADY has a cached thumbnail
-        let cachedThumbUrl: string | null = null;
-        for (let i = 0; i < childMarkers.length; i++) {
-          const path = (childMarkers[i] as any).photoPath;
-          if (path && currentThumbs[path]) {
-            cachedThumbUrl = currentThumbs[path];
-            break;
+        let activeIdx = (c as any)._activePhotoIndex;
+        if (activeIdx === undefined) {
+          if (selectedPathRef.current) {
+            const foundIdx = childPaths.indexOf(selectedPathRef.current);
+            activeIdx = foundIdx !== -1 ? foundIdx : 0;
+          } else {
+            activeIdx = 0;
+          }
+          (c as any)._activePhotoIndex = activeIdx;
+        }
+
+        const activePath = childPaths[activeIdx] || childPaths[0];
+
+        if (!showThumbnailCardsRef.current) {
+          return createCompactClusterPin(count, clusterId);
+        }
+
+        const currentThumbs = useProcessStore.getState().thumbnails;
+        let cachedThumbUrl: string | null = (activePath && currentThumbs[activePath]) || null;
+        if (!cachedThumbUrl) {
+          for (let i = 0; i < childPaths.length; i++) {
+            const p = childPaths[i];
+            if (p && currentThumbs[p]) {
+              cachedThumbUrl = currentThumbs[p];
+              break;
+            }
           }
         }
 
         if (cachedThumbUrl) {
-          return createClusterThumbnailPin(cachedThumbUrl, count);
+          return createClusterThumbnailPin(cachedThumbUrl, count, clusterId, activeIdx);
         }
 
-        return createClusterLoadingPin(count);
+        return createClusterLoadingPin(count, clusterId, activeIdx);
       },
     });
 
@@ -757,22 +843,36 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       const sw = bounds.getSouthWest();
       const distance = ne.distanceTo(sw); // distance in meters across photos in cluster
 
-      const currentZoom = map.getZoom();
-
-      // If all photos in this cluster are within ~15 meters of each other (e.g. same spot/monument)
-      // or if we are already zoomed in close (zoom >= 16):
-      // Spiderfy them in place without any violent zoom jumps!
-      if (distance < 15 || currentZoom >= 16) {
-        clusterMarker.spiderfy();
+      if (distance > 15 && map.getZoom() < 17) {
+        map.fitBounds(bounds, { maxZoom: 17, padding: [40, 40] });
       } else {
-        // Geographically dispersed photos:
-        // Smoothly advance by at most 2 levels at a time (capped at zoom 16 to avoid street-level plunge)
-        const maxFitZoom = map.getBoundsZoom(bounds);
-        const targetZoom = Math.min(currentZoom + 2, maxFitZoom, 16);
+        const childMarkers = clusterMarker.getAllChildMarkers();
+        const childPaths = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
+        if (childPaths.length > 0) {
+          let currIdx = (clusterMarker as any)._activePhotoIndex ?? 0;
+          const nextIdx = (currIdx + 1) % childPaths.length;
+          (clusterMarker as any)._activePhotoIndex = nextIdx;
+          const nextPath = childPaths[nextIdx];
 
-        map.flyTo(bounds.getCenter(), Math.max(targetZoom, currentZoom + 1), {
-          duration: 0.45,
-        });
+          const el = clusterMarker.getElement();
+          if (el) {
+            const imgEl = el.querySelector('img');
+            const thumbs = useProcessStore.getState().thumbnails;
+            if (imgEl && thumbs[nextPath]) {
+              imgEl.src = thumbs[nextPath];
+            }
+            const badgeEl = el.querySelector('[data-cluster-badge]');
+            if (badgeEl) {
+              badgeEl.textContent = `${nextIdx + 1}/${childPaths.length}`;
+            }
+          }
+
+          isWheelSelectingRef.current = true;
+          onSelectPhotoRef.current(nextPath, new MouseEvent('click'));
+          setTimeout(() => {
+            isWheelSelectingRef.current = false;
+          }, 150);
+        }
       }
     };
 
@@ -785,6 +885,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       clusterGroup.off('clusterclick', handleClusterClick);
       clusterGroup.clearLayers();
       map.removeLayer(clusterGroup);
+      clustersMapRef.current.clear();
       markersMapRef.current.clear();
       setCluster(null);
     };
@@ -930,7 +1031,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         (marker as any).photoPath = photo.path;
 
         marker.bindPopup(
-          buildPopupHtml(photo, cachedThumb, dblClickHint, removeGpsText, revertGpsText, dragHintText),
+          buildPopupHtml(photo, cachedThumb, dblClickHint, revertGpsText, dragHintText),
           {
             closeButton: true,
             autoPan: true,
@@ -984,7 +1085,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         }
         const cachedThumb = currentThumbs[photo.path];
         marker.setPopupContent(
-          buildPopupHtml(photo, cachedThumb, dblClickHint, removeGpsText, revertGpsText, dragHintText),
+          buildPopupHtml(photo, cachedThumb, dblClickHint, revertGpsText, dragHintText),
         );
       }
 
@@ -1007,12 +1108,11 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         const targetMarker = markersMapRef.current.get(selectedPhoto.path);
         const targetZoom = 16;
         map.setView([selectedPhoto.lat, selectedPhoto.lon], targetZoom);
-        if (cluster && targetMarker) {
-          cluster.zoomToShowLayer(targetMarker, () => {
+        if (targetMarker) {
+          const visibleParent = cluster ? cluster.getVisibleParent(targetMarker) : targetMarker;
+          if (!cluster || visibleParent === targetMarker) {
             targetMarker.openPopup();
-          });
-        } else if (targetMarker) {
-          targetMarker.openPopup();
+          }
         }
       } else {
         try {
@@ -1035,7 +1135,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     onRequestThumbnails,
     map,
     dblClickHint,
-    removeGpsText,
     revertGpsText,
     dragHintText,
     showThumbnailCards,
@@ -1086,7 +1185,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         const isSelected = selectedPath === path;
         marker.setIcon(createPhotoThumbnailPin(thumbUrl, isSelected, photo.isRaw, photo.filename));
         marker.setPopupContent(
-          buildPopupHtml(photo, thumbUrl, dblClickHint, removeGpsText, revertGpsText, dragHintText),
+          buildPopupHtml(photo, thumbUrl, dblClickHint, revertGpsText, dragHintText),
         );
         markersToRefresh.push(marker);
       }
@@ -1105,7 +1204,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     photos,
     selectedPath,
     dblClickHint,
-    removeGpsText,
     revertGpsText,
     dragHintText,
     cluster,
@@ -1158,6 +1256,9 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
     if (!selectedPath) return;
 
+    // If selection was triggered by mouse wheel cycling inside a cluster, do not fly or spiderfy
+    if (isWheelSelectingRef.current) return;
+
     const marker = markersMapRef.current.get(selectedPath);
     const photo = photos.find((p) => p.path === selectedPath);
 
@@ -1175,16 +1276,34 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
       if (!hasZoomedToInitialRef.current || isDifferent) {
         hasZoomedToInitialRef.current = true;
-        if (cluster) {
-          cluster.zoomToShowLayer(marker, () => {
-            marker.openPopup();
-            if (map.getZoom() < targetZoom) {
-              map.flyTo([photo.lat, photo.lon], targetZoom, { duration: 0.5 });
-            }
-          });
-        } else {
+        const visibleParent = cluster ? cluster.getVisibleParent(marker) : marker;
+        if (!cluster || visibleParent === marker) {
           marker.openPopup();
-          map.flyTo([photo.lat, photo.lon], targetZoom, { duration: 0.6 });
+          if (map.getZoom() < targetZoom) {
+            map.flyTo([photo.lat, photo.lon], targetZoom, { duration: 0.5 });
+          }
+        } else if (visibleParent) {
+          const clusterObj = visibleParent as L.MarkerCluster;
+          const childMarkers = clusterObj.getAllChildMarkers();
+          const childPaths = childMarkers
+            .map((m: any) => m.photoPath as string)
+            .filter(Boolean);
+          const idx = childPaths.indexOf(photo.path);
+          if (idx !== -1) {
+            (clusterObj as any)._activePhotoIndex = idx;
+            const el = clusterObj.getElement();
+            if (el) {
+              const imgEl = el.querySelector('img');
+              if (imgEl && thumb) {
+                imgEl.src = thumb;
+              }
+              const badgeEl = el.querySelector('[data-cluster-badge]');
+              if (badgeEl) {
+                badgeEl.textContent = `${idx + 1}/${childPaths.length}`;
+              }
+            }
+          }
+          map.panTo([photo.lat, photo.lon], { animate: true, duration: 0.4 });
         }
       }
     }
@@ -1259,7 +1378,7 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
         onContextMenu={onContextMenu}
         style={{ width: '100%', height: cardHeight }}
         className={clsx(
-          'shrink-0 bg-surface rounded-md overflow-hidden cursor-grab active:cursor-grabbing group relative flex flex-col transition-shadow duration-150 shadow-sm hover:shadow-md select-none',
+          'shrink-0 bg-surface rounded-md overflow-hidden cursor-pointer active:cursor-grabbing group relative flex flex-col transition-shadow duration-150 shadow-sm hover:shadow-md select-none',
           isSelected && 'ring-2 ring-accent z-10 shadow-md',
         )}
       >
@@ -1359,6 +1478,8 @@ interface MapControlsProps {
   isDockOpen: boolean;
   onToggleDock: () => void;
   unlocatedCount: number;
+  canUndo?: boolean;
+  onUndo?: () => void;
 }
 
 const MapControls: React.FC<MapControlsProps> = ({
@@ -1370,6 +1491,8 @@ const MapControls: React.FC<MapControlsProps> = ({
   isDockOpen,
   onToggleDock,
   unlocatedCount,
+  canUndo,
+  onUndo,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const { t } = useTranslation();
@@ -1394,6 +1517,24 @@ const MapControls: React.FC<MapControlsProps> = ({
             {unlocatedCount > 99 ? '99+' : unlocatedCount}
           </span>
         )}
+      </button>
+
+      {/* Undo Button */}
+      <button
+        onClick={onUndo}
+        disabled={!canUndo}
+        className={`w-9 h-9 rounded-lg border flex items-center justify-center shadow-lg backdrop-blur-sm transition active:scale-95 ${
+          canUndo
+            ? 'bg-surface/90 hover:bg-surface border-border-color/30 text-text-primary hover:text-accent cursor-pointer'
+            : 'bg-surface/50 border-border-color/20 text-text-secondary/40 cursor-not-allowed opacity-50'
+        }`}
+        title={
+          canUndo
+            ? t('library.map.undoTooltip', { defaultValue: 'Undo GPS change (Ctrl+Z)' })
+            : t('library.map.undoDisabled', { defaultValue: 'No GPS changes to undo' })
+        }
+      >
+        <Undo2 className="w-4 h-4" />
       </button>
 
       <button
@@ -1478,6 +1619,17 @@ export interface MapViewProps {
   onRequestThumbnails?(paths: string[]): void;
 }
 
+interface GpsUndoItem {
+  path: string;
+  previousLat: number | null;
+  previousLon: number | null;
+  hadNativeGps?: boolean;
+}
+
+interface GpsUndoAction {
+  items: GpsUndoItem[];
+}
+
 export default function MapView(props: MapViewProps) {
   const [tileStyle, setTileStyle] = useState<MapStyle>(getInitialMapStyle);
   const [showThumbnailCards, setShowThumbnailCards] = useState<boolean>(getInitialShowThumbnails);
@@ -1499,6 +1651,9 @@ export default function MapView(props: MapViewProps) {
   const isResizing = useRef(false);
   const [isResizingState, setIsResizingState] = useState(false);
   const dockWidthRef = useRef(dockWidth);
+
+  const undoStackRef = useRef<GpsUndoAction[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
 
   useEffect(() => {
     dockWidthRef.current = dockWidth;
@@ -1650,12 +1805,14 @@ export default function MapView(props: MapViewProps) {
     [onRequestThumbnails],
   );
 
-  // Reset EXIF request tracking when switching folders
+  // Reset EXIF request tracking and undo stack when switching folders
   useEffect(() => {
     requestedExifRef.current.clear();
     setLocalExifMap({});
     setSelectedDockPaths(new Set());
     setMapContextMenu(null);
+    undoStackRef.current = [];
+    setCanUndo(false);
   }, [currentFolderPath]);
 
   // Non-blocking, smooth EXIF ingestion without continuous UI re-sorting loops
@@ -1746,10 +1903,37 @@ export default function MapView(props: MapViewProps) {
     };
   }, [imageList, localExifMap]);
 
-  // Apply or remove GPS coordinates to sidecars and state
-  const applyGpsToPhotos = useCallback(
-    async (paths: string[], lat: number | null, lon: number | null) => {
+  // Apply or remove GPS coordinates to sidecars and state, with optional Undo tracking
+  const applyGpsToPhotosInternal = useCallback(
+    async (
+      paths: string[],
+      lat: number | null,
+      lon: number | null,
+      recordUndo: boolean = true,
+      customSuccessMsg?: string,
+    ) => {
       if (paths.length === 0) return;
+
+      // If recordUndo is true, capture previous state before changing
+      if (recordUndo) {
+        const undoItems: GpsUndoItem[] = [];
+        for (const p of paths) {
+          const img = imageList.find((i) => i.path === p);
+          const currentGps = getImageGps(img, localExifMap[p]);
+          const hadNative =
+            localExifMap[p]?.HasNativeGPS === 'true' ||
+            img?.exif?.HasNativeGPS === 'true';
+          undoItems.push({
+            path: p,
+            previousLat: currentGps ? currentGps.lat : null,
+            previousLon: currentGps ? currentGps.lon : null,
+            hadNativeGps: hadNative,
+          });
+        }
+        undoStackRef.current.push({ items: undoItems });
+        setCanUndo(true);
+      }
+
       try {
         await invoke(Invokes.SetGpsForPaths, {
           paths,
@@ -1851,7 +2035,9 @@ export default function MapView(props: MapViewProps) {
           return state;
         });
 
-        if (lat !== null) {
+        if (customSuccessMsg) {
+          toast.success(customSuccessMsg);
+        } else if (lat !== null) {
           const hadPreviousGps = paths.some((p) => {
             const img = imageList.find((i) => i.path === p);
             return Boolean(getImageGps(img, localExifMap[p]));
@@ -1902,16 +2088,83 @@ export default function MapView(props: MapViewProps) {
     [t, imageList, localExifMap],
   );
 
-  // Handle reverting GPS coordinates to original camera EXIF
+  const applyGpsToPhotos = useCallback(
+    (paths: string[], lat: number | null, lon: number | null) => {
+      return applyGpsToPhotosInternal(paths, lat, lon, true);
+    },
+    [applyGpsToPhotosInternal],
+  );
+
+  // Undo last GPS change
+  const handleUndoGps = useCallback(async () => {
+    const action = undoStackRef.current.pop();
+    setCanUndo(undoStackRef.current.length > 0);
+    if (!action || action.items.length === 0) return;
+
+    // Group items by target previous coordinate to run in minimal batch operations
+    const groups = new Map<string, { lat: number | null; lon: number | null; paths: string[] }>();
+    for (const item of action.items) {
+      const key = `${item.previousLat}_${item.previousLon}`;
+      if (!groups.has(key)) {
+        groups.set(key, { lat: item.previousLat, lon: item.previousLon, paths: [] });
+      }
+      groups.get(key)!.paths.push(item.path);
+    }
+
+    for (const group of groups.values()) {
+      await applyGpsToPhotosInternal(group.paths, group.lat, group.lon, false);
+    }
+
+    toast.info(t('library.map.undoSuccess', { defaultValue: 'GPS change undone' }));
+  }, [applyGpsToPhotosInternal, t]);
+
+  // Global Ctrl+Z / Cmd+Z shortcut listener for undoing geotagging actions
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        if (undoStackRef.current.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleUndoGps();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndoGps]);
+
+  // Handle reverting GPS coordinates to original camera EXIF or clearing if none existed originally
   const handleRevertGps = useCallback(
     async (path: string) => {
+      // Record undo state before reverting
+      const img = imageList.find((i) => i.path === path);
+      const currentGps = getImageGps(img, localExifMap[path]);
+      if (currentGps) {
+        undoStackRef.current.push({
+          items: [
+            {
+              path,
+              previousLat: currentGps.lat,
+              previousLon: currentGps.lon,
+              hadNativeGps:
+                localExifMap[path]?.HasNativeGPS === 'true' ||
+                img?.exif?.HasNativeGPS === 'true',
+            },
+          ],
+        });
+        setCanUndo(true);
+      }
+
       try {
         const result = await invoke<Record<string, [number, number] | null>>(
           Invokes.RevertGpsForPaths,
           { paths: [path] },
         );
         const coords = result[path];
+        const cleanPath = path.split('?vc=')[0];
+
         if (coords) {
+          // Photo originally had camera GPS: restore it
           const [lat, lon] = coords;
           const updates: Record<string, string> = {
             GPSLatitude: toDmsString(lat),
@@ -1929,7 +2182,6 @@ export default function MapView(props: MapViewProps) {
             return next;
           });
 
-          const cleanPath = path.split('?vc=')[0];
           useLibraryStore.getState().setLibrary((state) => ({
             imageList: state.imageList.map((img) => {
               if (img.path.split('?vc=')[0] === cleanPath) {
@@ -1961,6 +2213,58 @@ export default function MapView(props: MapViewProps) {
               defaultValue: 'Restored original camera GPS coordinates for 1 photo',
             }),
           );
+        } else {
+          // Photo originally had NO GPS coordinates: clear from map back to dock
+          setLocalExifMap((prev) => {
+            const next = { ...prev };
+            if (next[path]) {
+              const cleaned = { ...next[path] };
+              delete cleaned.GPSLatitude;
+              delete cleaned.GPSLatitudeRef;
+              delete cleaned.GPSLongitude;
+              delete cleaned.GPSLongitudeRef;
+              delete cleaned.IsGpsModified;
+              next[path] = cleaned;
+            }
+            return next;
+          });
+
+          useLibraryStore.getState().setLibrary((state) => ({
+            imageList: state.imageList.map((img) => {
+              if (img.path.split('?vc=')[0] === cleanPath && img.exif) {
+                const cleaned = { ...img.exif };
+                delete cleaned.GPSLatitude;
+                delete cleaned.GPSLatitudeRef;
+                delete cleaned.GPSLongitude;
+                delete cleaned.GPSLongitudeRef;
+                delete cleaned.IsGpsModified;
+                return { ...img, exif: cleaned };
+              }
+              return img;
+            }),
+          }));
+
+          useEditorStore.getState().setEditor((state) => {
+            if (!state.selectedImage || state.selectedImage.path.split('?vc=')[0] !== cleanPath) {
+              return state;
+            }
+            if (state.selectedImage.exif) {
+              const cleaned = { ...state.selectedImage.exif };
+              delete cleaned.GPSLatitude;
+              delete cleaned.GPSLatitudeRef;
+              delete cleaned.GPSLongitude;
+              delete cleaned.GPSLongitudeRef;
+              delete cleaned.IsGpsModified;
+              return { selectedImage: { ...state.selectedImage, exif: cleaned } };
+            }
+            return state;
+          });
+
+          toast.info(
+            t('library.map.revertCleared', {
+              defaultValue: 'Cleared GPS coordinates (no original camera GPS)',
+            }),
+          );
         }
       } catch (err) {
         console.error('Failed to revert GPS coordinates', err);
@@ -1972,7 +2276,7 @@ export default function MapView(props: MapViewProps) {
         );
       }
     },
-    [t],
+    [t, imageList, localExifMap],
   );
 
   // Handle moving / dragging an existing photo pin on the map
@@ -2301,7 +2605,6 @@ export default function MapView(props: MapViewProps) {
             onSelectPhoto={onImageClick}
             onDoubleClickPhoto={onImageDoubleClick}
             onContextMenuPhoto={onContextMenu}
-            onRemoveGps={(path) => applyGpsToPhotos([path], null, null)}
             onRevertGps={handleRevertGps}
             onMovePhoto={handleMovePhoto}
             onMapContextMenu={handleMapRightClick}
@@ -2320,6 +2623,8 @@ export default function MapView(props: MapViewProps) {
           isDockOpen={isDockOpen}
           onToggleDock={handleToggleDock}
           unlocatedCount={unlocatedPhotos.length}
+          canUndo={canUndo}
+          onUndo={handleUndoGps}
         />
       </div>
 

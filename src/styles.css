@@ -462,16 +462,11 @@
 .photo-thumbnail-pin,
 .photo-thumbnail-pin-loading,
 .photo-cluster-thumbnail-pin,
-.photo-cluster-thumbnail-pin-loading {
+.photo-cluster-thumbnail-pin-loading,
+.leaflet-marker-draggable {
   background: transparent !important;
   border: none !important;
-}
-
-.custom-photo-pin,
-.photo-thumbnail-pin,
-.photo-thumbnail-pin-loading,
-.leaflet-marker-draggable {
-  cursor: grab !important;
+  cursor: pointer !important;
 }
 
 .custom-photo-pin:active,
@@ -485,6 +480,17 @@
 .photo-cluster-thumbnail-pin:hover,
 .photo-cluster-thumbnail-pin-loading:hover {
   transform: scale(1.06);
+}
+
+/* Map canvas default pointer/arrow cursor instead of grab hand */
+.leaflet-container,
+.leaflet-grab,
+.leaflet-container.leaflet-grab {
+  cursor: default !important;
+}
+
+.leaflet-drag-target {
+  cursor: grabbing !important;
 }
 
 /* Custom dark popup styling matched with RapidRAW theme */

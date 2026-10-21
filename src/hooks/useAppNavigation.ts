@@ -197,10 +197,8 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
 
       selectedImagePathRef.current = path;
 
-      const newMultiSelectedPaths = multiSelectedPaths.includes(path) ? multiSelectedPaths : [path];
-
       setLibrary({
-        multiSelectedPaths: newMultiSelectedPaths,
+        multiSelectedPaths: [path],
         libraryActivePath: path,
         selectionAnchorPath: path,
       });
@@ -214,6 +212,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         isWbPickerActive: false,
         isRelightPickerActive: false,
         activeRelightLightId: null,
+        activeCenterMarker: null,
         previewOverride: null,
       });
 
@@ -268,9 +267,6 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
               freshAdjustments = normalizeLoadedAdjustments(metadata.adjustments);
             } else {
               freshAdjustments = { ...INITIAL_ADJUSTMENTS };
-            }
-            if (freshAdjustments.aspectRatio == null && cached.adjustments.aspectRatio != null) {
-              freshAdjustments.aspectRatio = cached.adjustments.aspectRatio;
             }
             if (!isSliderDragging && JSON.stringify(cached.adjustments) !== JSON.stringify(freshAdjustments)) {
               setEditor({ adjustments: freshAdjustments });

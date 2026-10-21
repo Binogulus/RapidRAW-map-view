@@ -46,7 +46,7 @@ export function getImageGps(
   image: ImageFile,
   overrideExif?: Record<string, string>,
 ): GeoLocation | null {
-  const exif = overrideExif || image.exif;
+  const exif = overrideExif !== undefined ? overrideExif : image.exif;
   if (!exif) return null;
 
   const latStr = exif.GPSLatitude;
@@ -85,7 +85,7 @@ export function getImageTimestamp(
   image: ImageFile,
   overrideExif?: Record<string, string>,
 ): string | null {
-  const exif = overrideExif || image.exif;
+  const exif = overrideExif !== undefined ? overrideExif : image.exif;
   if (exif) {
     const dt = exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate || exif.DateTime;
     if (dt) return dt;
@@ -98,4 +98,13 @@ export function getImageTimestamp(
     }
   }
   return null;
+}
+
+export function toDmsString(val: number): string {
+  const absVal = Math.abs(val);
+  const deg = Math.floor(absVal);
+  const minFull = (absVal - deg) * 60;
+  const min = Math.floor(minFull);
+  const sec = (minFull - min) * 60;
+  return `${deg} deg ${min} min ${sec.toFixed(2)} sec`;
 }

@@ -14,12 +14,16 @@ import Resizer from '../../ui/Resizer';
 import AdjustmentSectionsSubMenu from './AdjustmentSectionsSubMenu';
 import {
   Adjustments,
-  SectionVisibility,
   INITIAL_ADJUSTMENTS,
   ADJUSTMENT_SECTIONS,
+  getActiveTools,
   getVisibleAdjustmentSections,
+  isToolActive,
+  setToolActive,
+  toggleToolActive,
 } from '../../../utils/adjustments';
 import { useContextMenu } from '../../../context/ContextMenuContext';
+import { ToolVisibilityContext } from '../../../context/ToolVisibilityContext';
 import { OPTION_SEPARATOR, Orientation } from '../../ui/AppProperties';
 import Text from '../../ui/Text';
 import { TextVariants, TextColors, TextWeights } from '../../../types/typography';
@@ -35,7 +39,13 @@ export default function Controls() {
   const { showContextMenu } = useContextMenu();
   const { isResizingWaveform, onToggleWaveform, setActiveWaveformChannel, handleWaveformResize } =
     useWaveformControls();
-  const { setAdjustments, handleAutoAdjustments, handleLutSelect, setLutPreviewOverride } = useEditorActions();
+  const {
+    setAdjustments,
+    handleAutoAdjustments,
+    handleLutSelect,
+    setLutPreviewOverride,
+    handleResetAdjustments: handleResetAdjustmentsAction,
+  } = useEditorActions();
 
   const { appSettings, theme } = useSettingsStore(
     useShallow((state) => ({
@@ -85,7 +95,12 @@ export default function Controls() {
   );
 
   const toggleWbPicker = useCallback(
-    () => setEditor((state) => ({ isWbPickerActive: !state.isWbPickerActive, isRelightPickerActive: false })),
+    () =>
+      setEditor((state) => ({
+        isWbPickerActive: !state.isWbPickerActive,
+        isRelightPickerActive: false,
+        activeCenterMarker: null,
+      })),
     [setEditor],
   );
 
@@ -102,30 +117,28 @@ export default function Controls() {
     [setUI],
   );
 
-  const handleToggleVisibility = (sectionName: string) => {
-    setAdjustments((prev: Adjustments) => {
-      const currentVisibility: SectionVisibility = prev.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility;
-      return {
-        ...prev,
-        sectionVisibility: {
-          ...currentVisibility,
-          [sectionName]: !currentVisibility[sectionName],
-        },
-      };
-    });
+  const handleToggleVisibility = (id: string) => {
+    setAdjustments((prev: Adjustments) => ({
+      ...prev,
+      activeTools: toggleToolActive(getActiveTools(prev), id),
+    }));
   };
 
   const handleResetAdjustments = () => {
-    setAdjustments((prev: Adjustments) => ({
-      ...prev,
-      ...Object.keys(ADJUSTMENT_SECTIONS)
-        .flatMap((s) => ADJUSTMENT_SECTIONS[s])
-        .reduce((acc: any, key: string) => {
-          acc[key] = INITIAL_ADJUSTMENTS[key as keyof Adjustments];
-          return acc;
-        }, {}),
-      sectionVisibility: { ...INITIAL_ADJUSTMENTS.sectionVisibility },
-    }));
+    if (selectedImage?.path) {
+      handleResetAdjustmentsAction([selectedImage.path]);
+    } else {
+      setAdjustments((prev: Adjustments) => ({
+        ...prev,
+        ...Object.keys(ADJUSTMENT_SECTIONS)
+          .flatMap((s) => ADJUSTMENT_SECTIONS[s])
+          .reduce((acc: any, key: string) => {
+            acc[key] = INITIAL_ADJUSTMENTS[key as keyof Adjustments];
+            return acc;
+          }, {}),
+        activeTools: { ...INITIAL_ADJUSTMENTS.activeTools },
+      }));
+    }
   };
 
   const handleToggleSection = (section: string) => {
@@ -169,10 +182,7 @@ export default function Controls() {
       setAdjustments((prev: Adjustments) => ({
         ...prev,
         ...copiedSectionAdjustments.values,
-        sectionVisibility: {
-          ...(prev.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility),
-          [sectionName]: true,
-        },
+        activeTools: setToolActive(getActiveTools(prev), sectionName, true),
       }));
     };
 
@@ -184,10 +194,7 @@ export default function Controls() {
       setAdjustments((prev: Adjustments) => ({
         ...prev,
         ...resetValues,
-        sectionVisibility: {
-          ...(prev.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility),
-          [sectionName]: true,
-        },
+        activeTools: setToolActive(getActiveTools(prev), sectionName, true),
       }));
     };
 
@@ -298,31 +305,35 @@ export default function Controls() {
             }[sectionName];
 
             const title = t(`editor.adjustments.sections.${sectionName}`);
-            const sectionVisibility = adjustments.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility;
+            const activeTools = getActiveTools(adjustments);
 
             return (
               <div className="shrink-0 group" key={sectionName}>
                 <CollapsibleSection
-                  isContentVisible={sectionVisibility[sectionName as keyof SectionVisibility]}
+                  isContentVisible={isToolActive(activeTools, sectionName)}
                   isOpen={collapsibleSectionsState[sectionName as keyof typeof collapsibleSectionsState]}
                   onContextMenu={(e: any) => handleSectionContextMenu(e, sectionName)}
                   onToggle={() => handleToggleSection(sectionName)}
                   onToggleVisibility={() => handleToggleVisibility(sectionName)}
                   title={title}
                 >
-                  <SectionComponent
-                    adjustments={adjustments}
-                    setAdjustments={setAdjustments}
-                    histogram={histogram}
-                    theme={theme}
-                    handleLutSelect={handleLutSelect}
-                    onLutHover={setLutPreviewOverride}
-                    appSettings={appSettings}
-                    asShotWhiteBalance={selectedImage.asShotWhiteBalance}
-                    isWbPickerActive={isWbPickerActive}
-                    toggleWbPicker={toggleWbPicker}
-                    onDragStateChange={onDragStateChange}
-                  />
+                  <ToolVisibilityContext.Provider
+                    value={{ activeTools, onToggleTool: handleToggleVisibility, section: sectionName }}
+                  >
+                    <SectionComponent
+                      adjustments={adjustments}
+                      setAdjustments={setAdjustments}
+                      histogram={histogram}
+                      theme={theme}
+                      handleLutSelect={handleLutSelect}
+                      onLutHover={setLutPreviewOverride}
+                      appSettings={appSettings}
+                      asShotWhiteBalance={selectedImage.asShotWhiteBalance}
+                      isWbPickerActive={isWbPickerActive}
+                      toggleWbPicker={toggleWbPicker}
+                      onDragStateChange={onDragStateChange}
+                    />
+                  </ToolVisibilityContext.Provider>
                 </CollapsibleSection>
               </div>
             );

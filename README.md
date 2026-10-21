@@ -17,88 +17,91 @@
 
 </div>
 
-# RapidRAW: Map View Feature Proposal
+# RapidRAW: Map View & Interactive Geotagging Proposal
 
-> An interactive, photographic map view proposal for RapidRAW to enable geospatial exploration, clustering, and inspection of geotagged photo libraries.
+> An interactive, photographic map view and non-destructive geotagging module for RapidRAW to enable geospatial exploration, clustering, inspection, and GPS placement of photo libraries.
 
-This repository serves as a public development and staging area maintained by **[Binogulus](https://github.com/Binogulus)** to design, test, and propose the native Map View module upstream to **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / @CyberTimon](https://github.com/CyberTimon)). The goal of this work is full integration into official RapidRAW releases.
+This repository serves as a public development and staging area maintained by **[Binogulus](https://github.com/Binogulus)** to design, test, and propose the native Map View & Interactive Geotagging module upstream to **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / @CyberTimon](https://github.com/CyberTimon)). The goal of this work is full integration into official RapidRAW releases.
 
 ---
 
-## 🗺️ RapidMAP: Native Photographic Map Explorer
+## 🗺️ RapidMAP: Native Photographic Map Explorer & Interactive Geotagging
 
 <div align="center">
 
 | 📍 **Native Library Integration** | 📸 **Photographic Clusters** | 🛰️ **3 Switchable Basemaps** |
 | :---: | :---: | :---: |
-| 4th mode alongside Grid, List, and Culling | Realistic photo-stack cards with item count badges | Dark OSM (custom CSS theme), Standard OSM & Esri Satellite |
+| 4th mode alongside Grid, List, and Culling with auto-zoom on selected photo | Realistic photo-stack cards with mouse-wheel & click-to-cycle browsing | Dark OSM (custom CSS theme), Standard OSM & Esri Satellite |
 
-| 🖼️ **High-Res Previews** | ⚡ **Zero-Cost Thumbnails** | 🧭 **Phase 2: Geotagging** |
+| 🖼️ **Clean High-Res Thumbnail Pins** | 🧭 **Interactive Geotagging Dock** | 💾 **Non-Destructive GPS & Reset** |
 | :---: | :---: | :---: |
-| 96×96px pins & 480×260px metadata popups | Cached preview reuse & O(1) reactive refresh | Drag & drop GPS placement with .xmp sidecars |
+| Clean 96×96px pins, compact pin toggle & instant Info panel sync | Resizable Culling-style Unlocated Dock with single & multi-photo drag & drop | `.rrdata` & `.xmp` sidecar sync, `Ctrl+Z` undo & unified Reset Adjustments |
 
 </div>
 
 ### 📸 Visual Walkthrough
 
-#### 1. Seamless Library Integration
+#### 1. Seamless Library Integration & Auto-Centering
 <p align="center">
   <img src="docs/screenshots/01-library-map-switcher.png" alt="Library Display Mode Switcher with Map View" width="100%">
 </p>
-<p align="center"><em>Native integration into the Library view mode switcher alongside Grid, List, and Culling.</em></p>
+<p align="center"><em>Native integration into the Library display mode switcher alongside Grid, List, and Culling, with automatic zoom and centering when entering Map View with a selected photo.</em></p>
 
 #### 2. Geographic Macro View & Photographic Clusters
 <p align="center">
   <img src="docs/screenshots/02-macro-clusters-overview.png" alt="Geographic Overview with Photo-Stack Clusters" width="100%">
 </p>
-<p align="center"><em>Macro overview with dynamic photo-stack clusters, item count badges, and dedicated map controls.</em></p>
+<p align="center"><em>Macro overview with dynamic photo-stack clusters, item count badges, interactive mouse-wheel / stacked-card cycling (`1/N`), and dedicated map controls.</em></p>
 
-#### 3. Regional Progressive Zoom & Dynamic Splitting
+#### 3. Regional Progressive Zoom & Clean Thumbnail Pins
 <p align="center">
-  <img src="docs/screenshots/03-regional-zoom-clusters.png" alt="Regional Zoom and Marker Clustering" width="100%">
+  <img src="docs/screenshots/03-regional-zoom-clusters.png" alt="Regional Zoom and Clean Thumbnail Pins" width="100%">
 </p>
-<p align="center"><em>Progressive cluster splitting and high-resolution photo pins tagged with format badges (ARW, DNG, etc.).</em></p>
+<p align="center"><em>Progressive cluster splitting into clean border-only 96×96px thumbnail pins (or compact circular pins) synchronized directly with the right-hand Info & Metadata sidebar.</em></p>
 
-#### 4. Close-Up Inspection & Full Metadata Preview Card
+#### 4. Interactive Geotagging & Unlocated Photos Dock
 <p align="center">
-  <img src="docs/screenshots/04-preview-popup-metadata.png" alt="High-Res Popup Preview with Metadata" width="100%">
+  <img src="docs/screenshots/04-unlocated-dock-geotagging.png" alt="Unlocated Photos Dock and Drag-and-Drop Geotagging" width="100%">
 </p>
-<p align="center"><em>Enlarged 480×260px preview card displaying image name, date/time, exact GPS coordinates, and synchronized metadata.</em></p>
+<p align="center"><em>Collapsible, resizable Unlocated Photos Dock matching Culling view cards (complete aspect ratio, hover EXIF, real-time scaling) with precision single or multi-photo drag-and-drop onto the map.</em></p>
+
+#### 5. Direct Pin Repositioning, Native Context Menu & Unified GPS Reset
+<p align="center">
+  <img src="docs/screenshots/05-reposition-undo-reset.png" alt="Direct Marker Repositioning, Undo and Native Context Menu" width="100%">
+</p>
+<p align="center"><em>Drag existing pins or clusters directly across the map to reposition them, use the toolbar Undo (`Ctrl+Z`), or invoke RapidRAW's native thumbnail context menu (including unified Reset Adjustments to restore original GPS state).</em></p>
 
 ### ✨ Key Features of the RapidMAP Module
 
-* **Natively Integrated in the Library Panel**: Toggle between Grid, List, Culling, and Map with a single click. Single-click selects and synchronizes with the filmstrip and sidebars; double-click directly opens the photo in the Adjustments editor; right-click opens the native context menu.
-* **Photographic Clusters (Stacked Cards)**: Grouped markers are presented as physical photo stacks with subtle tilt angles (`-3°` and `+4°`), accent borders matching RapidRAW's sleek dark theme, and compact item count badges (`15`, `42`, `200+`).
-* **High-Resolution Pins & Previews**: 
-  * 96×96px thumbnail pins with directional GPS anchor arrows (`96×106px`).
-  * Instant spiderfication for co-located shots ($\le 15$ meters) preventing overlap.
-  * 480×260px popup cards showcasing image metadata, EXIF details, capture date/time, and exact GPS coordinates.
+* **Natively Integrated in the Library Panel**:
+  * Toggle between Grid, List, Culling, and Map with a single click.
+  * **Smart Auto-Focus**: Automatically zooms and centers on the currently selected photo when switching to Map View from any module.
+  * Single-click selects and synchronizes directly with the filmstrip and right-hand Info/Metadata sidebar (`Ctrl/Cmd+Click` and `Shift+Click` supported for multi-photo selection)—without any intrusive map popups obstructing the canvas; double-click opens the photo in Adjustments; right-click on any pin or dock card opens **RapidRAW's native application context menu**.
+* **Photographic Clusters & Interactive Stack Browsing**:
+  * Grouped markers are presented as physical photo stacks with subtle tilt angles (`-3°` and `+4°`), accent borders matching RapidRAW's dark theme, and item count badges (`15`, `42`, `200+`).
+  * **Mouse-Wheel & Card-Click Cycling**: Hover over any cluster and scroll the mouse wheel—or click the background cards in the stack—to cycle through all photos inside the cluster with a live counter badge (`3/12`) and instant Info panel synchronization, without zooming or moving the map.
+* **Clean High-Resolution Thumbnail Pins & Compact Mode**:
+  * Clean 96×96px thumbnail pins (`96×106px` with directional GPS anchor arrow), free of cluttering format badges, plus a toolbar toggle to switch between **Photo Thumbnail Cards** and **Compact Pins**.
+* **Interactive Geotagging & Resizable Unlocated Photos Dock**:
+  * **Culling-Style Unlocated Dock**: Collapsible side tray listing all photos without GPS metadata, featuring complete aspect ratio thumbnails, filename labels, hover EXIF overlays, and smooth real-time thumbnail scaling when resizing the dock.
+  * **Precision Drag & Drop**: Drag single or multiple selected photos from the Unlocated Dock directly onto the map. The exact cursor tip (`clientX/clientY`) defines the drop coordinate, and dropping back onto the dock safely cancels the operation.
+  * **Direct Map Repositioning**: Drag existing map markers or clusters directly across the map with a custom floating drag avatar (showing the active thumbnail and multi-selection badge), or right-click on the map canvas to place/reposition selected photos at that spot.
+* **Non-Destructive Sidecar Persistence, Undo (`Ctrl+Z`) & Unified Reset Adjustments**:
+  * **Immutable RAW Safety**: Writes GPS coordinates to `.rrdata` sidecars and synchronizes standard `.xmp` sidecar files (`exif:GPSLatitude`, `exif:GPSLongitude`) without ever touching original RAW binaries.
+  * **GPS Undo History (`Ctrl+Z`)**: Multi-step undo stack for geotagging and repositioning operations directly accessible via the map toolbar button or `Ctrl+Z` / `Cmd+Z`.
+  * **Unified Reset Adjustments**: GPS modifications are seamlessly unified with RapidRAW's standard **"Reset Adjustments"** action (available in the native context menu and Editor Controls panel)—resetting an image's adjustments also restores its original camera EXIF GPS coordinates (or returns it to the Unlocated Dock if it originally had no GPS).
 * **Zero-Cost Thumbnail Performance**:
   * Prioritizes existing session-cached thumbnails with zero disk or Rust calls.
-  * Lazy-loads only 1 representative thumbnail per visible cluster on demand.
-  * O(1) reactive cluster updates via `refreshClusters()` as soon as previews resolve.
-* **3 Switchable Basemaps with Preference Persistence**:
-  * **Dark OSM**: High-contrast, inverted CSS fotoscuro filter tailored for photo editing dark rooms.
-  * **OpenStreetMap**: Standard clean street mapping.
-  * **Satellite (Esri)**: High-resolution satellite imagery for wilderness, landscape, and outdoor photography.
-  * Persistent selection saved across sessions via `localStorage`.
-* **Safe Coordinate Filtering**: Automatic rejection of "Null Island" coordinates ($< 0.0001$) to prevent misplaced ocean markers when GPS locks are incomplete.
-* **Multi-OS Automated Artifacts**: Dedicated GitHub Actions workflow generating Linux (`.AppImage`, `.deb`), Windows 11 (`.exe` NSIS, `.msi`), and macOS Apple Silicon (`.dmg`).
-
----
-
-### 🚀 Roadmap & Phase 2: Interactive Geotagging
-
-The next milestone for RapidMAP introduces **drag-and-drop geotagging**:
-1. **Unlocated Photos Dock**: A collapsible tray showing photos without GPS metadata.
-2. **Interactive Placement**: Drag photos directly onto any map location or right-click to place.
-3. **Non-destructive Metadata Sync**: Writes GPS tags to `.rrdata` sidecars and synchronizes with standard `.xmp` sidecar files without ever modifying immutable RAW binaries.
+  * Lazy-loads only 1 representative thumbnail per visible cluster on demand, with O(1) reactive cluster updates via `refreshClusters()`.
+* **3 Switchable Basemaps & Smooth Fractional Zoom**:
+  * **Dark OSM** (custom darkroom CSS filter), **OpenStreetMap** (Standard), and **Satellite (Esri World Imagery)** with persistent selection in `localStorage`.
+  * Smooth fractional wheel zoom (`zoomSnap: 0.25`) and automatic rejection of "Null Island" coordinates ($< 0.0001$).
 
 ---
 
 ### 🤝 Upstream Project & Integration
 
-RapidRAW is created and maintained by **[Timon Käch (@CyberTimon)](https://github.com/CyberTimon/RapidRAW)**. This repository is not a permanent fork or rival product, but a staging area dedicated to contributing photographic map exploration upstream into the official RapidRAW codebase.
+RapidRAW is created and maintained by **[Timon Käch (@CyberTimon)](https://github.com/CyberTimon/RapidRAW)**. This repository is not a permanent fork or rival product, but a staging area dedicated to contributing photographic map exploration and non-destructive geotagging upstream into the official RapidRAW codebase.
 
 ---
 
@@ -141,7 +144,20 @@ RapidRAW is still in active development and isn't yet as polished as mature tool
 <details>
 <summary><strong>Recent Changes</strong></summary>
 
+- **2026-10-18:** Added non-destructive AI denoise with disk caching and seamless tile blending, updated Lensfun database, and optimized Linux RAW preview pipelines
+- **2026-10-17:** Added movable on-canvas center controls for vignette and centré adjustments, touch multi-selection mode for Android, and cleaned default-only sidecar file handling
+- **2026-10-16:** Parallelized RAW post-processing and pixel format conversion for faster image rendering
+- **2026-10-15:** Added auto-straighten powered by horizon and line segment detection, and added DPI settings for print exports
+- **2026-10-13:** Added individual visibility toggles to every adjustment tool in the editor panel
+- **2026-10-12:** Added optional RAW baseline exposure and highlight preservation compensation
+- **2026-10-11:** Embed keywords, ratings, and color labels as standard XMP metadata during export, alongside improved RAW EXIF writing
+- **2026-10-10:** Added `{original_filename_number}` token support to library batch renaming
+- **2026-10-07:** Added 3D Relight effect with surface normal generation and on-canvas aiming shapes, alongside new Atmospheric Fog adjustment and staged preview caches
 - **2026-10-06:** Added AI-free mode, rewritten whites adjustment, and improved shadow and highlight recovery with mid-scale detail reinjection
+
+<details>
+<summary><strong>Expand further</strong></summary>
+
 - **2026-10-05:** Implemented log-space guided filter for edge-aware adjustments and integrated cloud API
 - **2026-10-04:** Added Kelvin white balance mode with area sampling, fine adjust mode for curves, pick/reject quick filters, and improved export presets
 - **2026-10-03:** Embed sRGB ICC profiles in exports, calculate HSL hue in perceptual color space & improve lens EXIF detection
@@ -151,10 +167,6 @@ RapidRAW is still in active development and isn't yet as polished as mature tool
 - **2026-09-27:** Tone curves now display inactive channels as colored overlay curves and reference markers
 - **2026-09-25:** Streamline adjustment panel customization and improve default tool visibility
 - **2026-09-23:** Added borders and aspect ratio padding to export options, plus reorderable and collapsible adjustment sections
-
-<details>
-<summary><strong>Expand further</strong></summary>
-
 - **2026-09-22:** Added Apple RAW 9 decoding/denoising support and custom savable crop aspect ratios
 - **2026-09-21:** Implemented cancellable AI tasks with real-time UI tracking and backend preparation for cloud inpainting
 - **2026-09-20:** Center-anchored crop resizing when holding Ctrl/Cmd on crop handles

@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@source not "../src-tauri";
+@import 'tailwindcss' source('.');
+@source '../index.html';
 @import 'leaflet/dist/leaflet.css';
 @import 'leaflet.markercluster/dist/MarkerCluster.css';
 @import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -466,20 +466,68 @@
 .leaflet-marker-draggable {
   background: transparent !important;
   border: none !important;
-  cursor: pointer !important;
+  cursor: grab !important;
 }
 
 .custom-photo-pin:active,
 .photo-thumbnail-pin:active,
 .photo-thumbnail-pin-loading:active,
+.photo-cluster-thumbnail-pin:active,
+.photo-cluster-thumbnail-pin-loading:active,
 .leaflet-marker-dragging,
 .leaflet-marker-dragging * {
   cursor: grabbing !important;
 }
 
+.custom-photo-pin img,
+.photo-thumbnail-pin img,
+.photo-thumbnail-pin-loading img,
+.photo-cluster-thumbnail-pin img,
+.photo-cluster-thumbnail-pin-loading img {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.custom-photo-pin svg,
+.photo-thumbnail-pin svg,
+.photo-thumbnail-pin-loading svg,
+.photo-cluster-thumbnail-pin svg,
+.photo-cluster-thumbnail-pin-loading svg {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.photo-drag-avatar {
+  pointer-events: none !important;
+  user-select: none !important;
+  z-index: 999999 !important;
+}
+
+.photo-drag-avatar img {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.photo-thumbnail-pin:hover,
+.photo-thumbnail-pin-loading:hover,
 .photo-cluster-thumbnail-pin:hover,
 .photo-cluster-thumbnail-pin-loading:hover {
   transform: scale(1.06);
+}
+
+.elevated-map-marker {
+  z-index: 100000 !important;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Map canvas default pointer/arrow cursor instead of grab hand */
@@ -489,7 +537,9 @@
   cursor: default !important;
 }
 
-.leaflet-drag-target {
+.leaflet-drag-target,
+.leaflet-container.leaflet-dragging,
+.leaflet-container.leaflet-dragging * {
   cursor: grabbing !important;
 }
 

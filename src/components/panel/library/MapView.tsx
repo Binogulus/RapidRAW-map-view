@@ -2,7 +2,49 @@ import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from '../../../utils/leaflet-setup';
 import 'leaflet.markercluster';
+
+// Safety patch for Leaflet.markercluster DistanceGrid: prevent "TypeError: undefined is not an object (evaluating 'p.x')"
+if ((L as any).DistanceGrid && (L as any).DistanceGrid.prototype) {
+  const dgProto = (L as any).DistanceGrid.prototype;
+  if (!dgProto.__rapidraw_patched) {
+    dgProto.__rapidraw_patched = true;
+
+    const origSqDist = dgProto._sqDist;
+    dgProto._sqDist = function (p: any, p2: any) {
+      if (!p || !p2 || typeof p.x !== 'number' || typeof p2.x !== 'number') {
+        return Infinity;
+      }
+      return origSqDist.call(this, p, p2);
+    };
+
+    const origRemoveObject = dgProto.removeObject;
+    dgProto.removeObject = function (obj: any, point: any) {
+      const found = origRemoveObject.call(this, obj, point);
+      if (!found) {
+        const grid = this._grid;
+        for (const r in grid) {
+          const row = grid[r];
+          if (!row) continue;
+          for (const c in row) {
+            const cell = row[c];
+            if (!cell) continue;
+            const idx = cell.indexOf(obj);
+            if (idx !== -1) {
+              cell.splice(idx, 1);
+              if (cell.length === 0) {
+                delete row[c];
+              }
+              return true;
+            }
+          }
+        }
+      }
+      return found;
+    };
+  }
+}
 import { invoke } from '@tauri-apps/api/core';
+import { List } from 'react-window';
 import {
   Maximize2,
   Layers,
@@ -152,15 +194,14 @@ function getFileExtension(filename: string): string {
   return parts.length > 1 ? parts.pop()!.toUpperCase() : '';
 }
 
-function createCustomPin(isSelected: boolean, isRaw: boolean): L.DivIcon {
+function createCustomPin(isSelected: boolean, isRaw: boolean, photoPath?: string): L.DivIcon {
   const primaryColor = isSelected ? '#38bdf8' : isRaw ? '#f59e0b' : '#0284c7';
   const glow = isSelected ? 'filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.9));' : '';
+  const encPath = photoPath ? encodeURIComponent(photoPath) : '';
 
   const html = `
-    <div style="${glow} transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${
-      isSelected ? 'scale(1.25)' : 'scale(1)'
-    }; cursor: pointer;">
-      <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div data-map-pin="photo" data-photo-path="${encPath}" style="${glow} width: 28px; height: 36px; display: inline-block; cursor: grab;">
+      <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="pointer-events: none;">
         <path d="M14 0C6.268 0 0 6.268 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.268 21.732 0 14 0Z" fill="${primaryColor}"/>
         <circle cx="14" cy="14" r="11" fill="#0f172a"/>
         <circle cx="14" cy="14" r="5" fill="${primaryColor}"/>
@@ -173,20 +214,24 @@ function createCustomPin(isSelected: boolean, isRaw: boolean): L.DivIcon {
     className: 'custom-photo-pin',
     iconSize: [28, 36],
     iconAnchor: [14, 36],
-    popupAnchor: [0, -32],
   });
 }
 
-function createThumbnailLoadingPin(isSelected: boolean, isRaw: boolean, _filename: string): L.DivIcon {
+function createThumbnailLoadingPin(
+  isSelected: boolean,
+  isRaw: boolean,
+  _filename: string,
+  photoPath?: string,
+): L.DivIcon {
   const borderColor = isSelected ? '#38bdf8' : isRaw ? '#f59e0b' : '#0284c7';
   const glow = isSelected
     ? 'box-shadow: 0 0 16px rgba(56, 189, 248, 0.9), 0 4px 10px rgba(0, 0, 0, 0.6);'
     : 'box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);';
-  const scale = isSelected ? 'scale(1.15)' : 'scale(1)';
+  const encPath = photoPath ? encodeURIComponent(photoPath) : '';
 
   const html = `
-    <div style="position: relative; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${scale}; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
-      <div style="
+    <div data-map-pin="photo" data-photo-path="${encPath}" style="position: relative; cursor: grab; display: flex; flex-direction: column; align-items: center; ${isSelected ? 'z-index: 100000 !important;' : ''}">
+      <div data-front-card="true" style="
         width: 96px;
         height: 96px;
         border-radius: 12px;
@@ -198,8 +243,9 @@ function createThumbnailLoadingPin(isSelected: boolean, isRaw: boolean, _filenam
         align-items: center;
         justify-content: center;
         position: relative;
+        cursor: grab;
       ">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="${borderColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="${borderColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; pointer-events: none;">
           <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
           <circle cx="9" cy="9" r="2"/>
           <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
@@ -212,6 +258,7 @@ function createThumbnailLoadingPin(isSelected: boolean, isRaw: boolean, _filenam
         border-right: 9px solid transparent;
         border-top: 10px solid ${borderColor};
         margin-top: -1px;
+        pointer-events: none;
       "></div>
     </div>
   `;
@@ -221,7 +268,6 @@ function createThumbnailLoadingPin(isSelected: boolean, isRaw: boolean, _filenam
     className: 'photo-thumbnail-pin-loading',
     iconSize: [96, 106],
     iconAnchor: [48, 106],
-    popupAnchor: [0, -100],
   });
 }
 
@@ -230,16 +276,17 @@ function createPhotoThumbnailPin(
   isSelected: boolean,
   isRaw: boolean,
   filename: string,
+  photoPath?: string,
 ): L.DivIcon {
   const borderColor = isSelected ? '#38bdf8' : isRaw ? '#f59e0b' : '#0284c7';
   const glow = isSelected
     ? 'box-shadow: 0 0 16px rgba(56, 189, 248, 0.9), 0 4px 10px rgba(0, 0, 0, 0.6);'
     : 'box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);';
-  const scale = isSelected ? 'scale(1.15)' : 'scale(1)';
+  const encPath = photoPath ? encodeURIComponent(photoPath) : '';
 
   const html = `
-    <div style="position: relative; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform: ${scale}; cursor: pointer; display: flex; flex-direction: column; align-items: center;">
-      <div style="
+    <div data-map-pin="photo" data-photo-path="${encPath}" style="position: relative; cursor: grab; display: flex; flex-direction: column; align-items: center; ${isSelected ? 'z-index: 100000 !important;' : ''}">
+      <div data-front-card="true" style="
         width: 96px;
         height: 96px;
         border-radius: 12px;
@@ -251,11 +298,13 @@ function createPhotoThumbnailPin(
         align-items: center;
         justify-content: center;
         position: relative;
+        cursor: grab;
       ">
         <img
           src="${thumbnailUrl}"
           alt="${filename}"
-          style="width: 100%; height: 100%; object-fit: cover; display: block;"
+          draggable="false"
+          style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; user-select: none;"
           loading="eager"
         />
       </div>
@@ -266,6 +315,7 @@ function createPhotoThumbnailPin(
         border-right: 9px solid transparent;
         border-top: 10px solid ${borderColor};
         margin-top: -1px;
+        pointer-events: none;
       "></div>
     </div>
   `;
@@ -275,7 +325,6 @@ function createPhotoThumbnailPin(
     className: 'photo-thumbnail-pin',
     iconSize: [96, 106],
     iconAnchor: [48, 106],
-    popupAnchor: [0, -100],
   });
 }
 
@@ -284,6 +333,7 @@ function createClusterThumbnailPin(
   count: number,
   clusterId?: number,
   activeIndex?: number,
+  isSelected: boolean = false,
 ): L.DivIcon {
   const countLabel =
     activeIndex !== undefined
@@ -292,10 +342,15 @@ function createClusterThumbnailPin(
         ? '999+'
         : count.toString();
 
+  const borderColor = isSelected ? '#38bdf8' : '#0284c7';
+  const glow = isSelected
+    ? 'box-shadow: 0 0 18px rgba(56, 189, 248, 0.9), 0 8px 16px rgba(0, 0, 0, 0.7);'
+    : 'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);';
+
   const html = `
-    <div data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+    <div data-map-pin="cluster" data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: grab; display: flex; flex-direction: column; align-items: center; ${isSelected ? 'z-index: 100000 !important;' : ''}">
       <!-- Stack background card 2 (bottom layer) -->
-      <div style="
+      <div data-stack-card="2" style="
         position: absolute;
         width: 90px;
         height: 90px;
@@ -306,10 +361,11 @@ function createClusterThumbnailPin(
         border: 2px solid rgba(56, 189, 248, 0.35);
         transform: rotate(4deg);
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        cursor: pointer;
       "></div>
 
       <!-- Stack background card 1 (middle layer) -->
-      <div style="
+      <div data-stack-card="1" style="
         position: absolute;
         width: 93px;
         height: 93px;
@@ -320,26 +376,29 @@ function createClusterThumbnailPin(
         border: 2px solid rgba(56, 189, 248, 0.6);
         transform: rotate(-3deg);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+        cursor: pointer;
       "></div>
 
       <!-- Front main card with thumbnail -->
-      <div style="
+      <div data-front-card="true" style="
         position: relative;
         width: 96px;
         height: 96px;
         border-radius: 12px;
-        border: 3px solid #38bdf8;
+        border: ${isSelected ? '3px' : '2px'} solid ${borderColor};
         overflow: hidden;
         background-color: #0b0f19;
-        box-shadow: 0 0 16px rgba(56, 189, 248, 0.5), 0 8px 16px rgba(0, 0, 0, 0.7);
+        ${glow}
         display: flex;
         align-items: center;
         justify-content: center;
+        cursor: grab;
       ">
         <img
           src="${thumbnailUrl}"
           alt="Cluster"
-          style="width: 100%; height: 100%; object-fit: cover; display: block;"
+          draggable="false"
+          style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; user-select: none;"
           loading="eager"
         />
 
@@ -361,8 +420,10 @@ function createClusterThumbnailPin(
           align-items: center;
           gap: 3px;
           z-index: 10;
+          pointer-events: none;
+          user-select: none;
         ">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.9;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.9; pointer-events: none;">
             <polygon points="12 2 2 7 12 12 22 7 12 2"/>
             <polyline points="2 17 12 22 22 17"/>
             <polyline points="2 12 12 17 22 12"/>
@@ -377,8 +438,9 @@ function createClusterThumbnailPin(
         height: 0;
         border-left: 9px solid transparent;
         border-right: 9px solid transparent;
-        border-top: 10px solid #38bdf8;
+        border-top: 10px solid ${borderColor};
         margin-top: -1px;
+        pointer-events: none;
       "></div>
     </div>
   `;
@@ -391,7 +453,12 @@ function createClusterThumbnailPin(
   });
 }
 
-function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?: number): L.DivIcon {
+function createClusterLoadingPin(
+  count: number,
+  clusterId?: number,
+  activeIndex?: number,
+  isSelected: boolean = false,
+): L.DivIcon {
   const countLabel =
     activeIndex !== undefined
       ? `${activeIndex + 1}/${count}`
@@ -399,10 +466,16 @@ function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?
         ? '999+'
         : count.toString();
 
+  const borderColor = isSelected ? '#38bdf8' : '#0284c7';
+  const glow = isSelected
+    ? 'box-shadow: 0 0 18px rgba(56, 189, 248, 0.9), 0 8px 16px rgba(0, 0, 0, 0.7);'
+    : 'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);';
+  const scale = isSelected ? 'scale(1.1)' : 'scale(1)';
+
   const html = `
-    <div data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+    <div data-map-pin="cluster" data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: grab; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: 50% 100%; transform: ${scale};">
       <!-- Stack background card 2 -->
-      <div style="
+      <div data-stack-card="2" style="
         position: absolute;
         width: 90px;
         height: 90px;
@@ -413,10 +486,11 @@ function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?
         border: 2px solid rgba(56, 189, 248, 0.35);
         transform: rotate(4deg);
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        cursor: pointer;
       "></div>
 
       <!-- Stack background card 1 -->
-      <div style="
+      <div data-stack-card="1" style="
         position: absolute;
         width: 93px;
         height: 93px;
@@ -427,23 +501,25 @@ function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?
         border: 2px solid rgba(56, 189, 248, 0.6);
         transform: rotate(-3deg);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+        cursor: pointer;
       "></div>
 
       <!-- Front card placeholder -->
-      <div style="
+      <div data-front-card="true" style="
         position: relative;
         width: 96px;
         height: 96px;
         border-radius: 12px;
-        border: 3px solid #38bdf8;
+        border: ${isSelected ? '3px' : '2px'} solid ${borderColor};
         overflow: hidden;
         background-color: #0f172a;
-        box-shadow: 0 0 16px rgba(56, 189, 248, 0.5), 0 8px 16px rgba(0, 0, 0, 0.7);
+        ${glow}
         display: flex;
         align-items: center;
         justify-content: center;
+        cursor: grab;
       ">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="${borderColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; pointer-events: none;">
           <polygon points="12 2 2 7 12 12 22 7 12 2"/>
           <polyline points="2 17 12 22 22 17"/>
           <polyline points="2 12 12 17 22 12"/>
@@ -467,8 +543,10 @@ function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?
           align-items: center;
           gap: 3px;
           z-index: 10;
+          pointer-events: none;
+          user-select: none;
         ">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.9;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.9; pointer-events: none;">
             <polygon points="12 2 2 7 12 12 22 7 12 2"/>
             <polyline points="2 17 12 22 22 17"/>
             <polyline points="2 12 12 17 22 12"/>
@@ -483,8 +561,9 @@ function createClusterLoadingPin(count: number, clusterId?: number, activeIndex?
         height: 0;
         border-left: 9px solid transparent;
         border-right: 9px solid transparent;
-        border-top: 10px solid #38bdf8;
+        border-top: 10px solid ${borderColor};
         margin-top: -1px;
+        pointer-events: none;
       "></div>
     </div>
   `;
@@ -501,103 +580,39 @@ function createCompactClusterPin(count: number, clusterId?: number): L.DivIcon {
   const countLabel = count > 999 ? '999+' : count.toString();
   const c = count < 10 ? 'small' : count < 100 ? 'medium' : 'large';
   return L.divIcon({
-    html: `<div data-cluster-id="${clusterId ?? ''}"><span>${countLabel}</span></div>`,
+    html: `<div data-map-pin="cluster" data-cluster-id="${clusterId ?? ''}"><span>${countLabel}</span></div>`,
     className: `marker-cluster marker-cluster-${c}`,
     iconSize: new L.Point(40, 40),
   });
 }
 
-function buildPopupHtml(
-  photo: MapPhotoItem,
-  thumbUrl: string | undefined,
-  dblClickHint: string,
-  revertGpsText: string,
-  dragHintText: string,
-): string {
-  const ext = getFileExtension(photo.filename);
-
-  return `
-    <div style="font-family: inherit; font-size: 13px; color: #f8fafc; width: 480px; max-width: 520px;" data-photo-path="${photo.path}">
-      ${
-        thumbUrl
-          ? `<div style="width: 100%; height: 260px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; background: #0b0f19; border: 1px solid #334155; cursor: pointer;">
-               <img src="${thumbUrl}" alt="${photo.filename}" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
-             </div>`
-          : ''
-      }
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;">
-        <span style="font-weight: 600; font-size: 15px; color: #fff; word-break: break-all;">
-          ${photo.filename}
-        </span>
-        <span style="
-          font-size: 11px;
-          font-weight: 700;
-          padding: 3px 8px;
-          border-radius: 5px;
-          background-color: ${photo.isRaw ? '#78350f' : '#0c4a6e'};
-          color: ${photo.isRaw ? '#fde68a' : '#bae6fd'};
-          border: 1px solid ${photo.isRaw ? '#d97706' : '#0284c7'};
-        ">
-          ${ext || 'IMG'}
-        </span>
-      </div>
-
-      ${
-        photo.timestamp
-          ? `<div style="display: flex; align-items: center; gap: 6px; color: #94a3b8; font-size: 12px; margin-bottom: 5px;">
-               <span>📅 ${photo.timestamp}</span>
-             </div>`
-          : ''
-      }
-
-      <div style="display: flex; align-items: center; gap: 6px; color: #38bdf8; font-family: monospace; font-size: 12px; margin-bottom: 4px;">
-        <span>📍 ${photo.lat.toFixed(6)}°, ${photo.lon.toFixed(6)}°</span>
-      </div>
-
-      <div style="display: flex; align-items: center; gap: 5px; color: #94a3b8; font-size: 11px; margin-bottom: 8px; opacity: 0.85;">
-        <span>✋ ${dragHintText}</span>
-      </div>
-
-      <div style="color: #64748b; font-size: 11px; word-break: break-all; margin-bottom: 8px;">
-        ${photo.path}
-      </div>
-
-      <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #334155; padding-top: 8px; gap: 8px;">
-        <span style="font-size: 11px; color: #38bdf8; opacity: 0.9;">
-          ${dblClickHint}
-        </span>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <button
-            data-action="revert-gps"
-            data-path="${photo.path}"
-            style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;"
-            title="${revertGpsText}"
-          >
-            ↺ ${revertGpsText}
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
+function getBestThumbnail(path: string): string | undefined {
+  const proc = useProcessStore.getState();
+  return proc.mediumThumbnails[path] || proc.thumbnails[path] || undefined;
 }
 
 interface PhotoClusterLayerProps {
   photos: MapPhotoItem[];
   selectedPath: string | null;
+  multiSelectedPaths: string[];
   currentFolderPath?: string | null;
   onSelectPhoto: (path: string, event: MouseEvent) => void;
   onDoubleClickPhoto: (path: string) => void;
   onContextMenuPhoto: (event: MouseEvent, path: string) => void;
   onRevertGps?: (path: string) => void;
-  onMovePhoto?: (path: string, lat: number, lon: number) => void;
+  onMovePhoto?: (paths: string[] | string, lat: number, lon: number) => void;
   onMapContextMenu?: (lat: number, lon: number, screenX: number, screenY: number) => void;
   showThumbnailCards: boolean;
   onRequestThumbnails?: (paths: string[]) => void;
+  repositioningPath?: string | null;
+  onStartReposition?: (path: string) => void;
+  onRepositionSelect?: (lat: number, lon: number) => void;
 }
 
 const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   photos,
   selectedPath,
+  multiSelectedPaths,
   currentFolderPath,
   onSelectPhoto,
   onDoubleClickPhoto,
@@ -607,6 +622,9 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   onMapContextMenu,
   showThumbnailCards,
   onRequestThumbnails,
+  repositioningPath,
+  onStartReposition,
+  onRepositionSelect,
 }) => {
   const map = useMap();
   const [cluster, setCluster] = useState<L.MarkerClusterGroup | null>(null);
@@ -615,10 +633,72 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   const isWheelSelectingRef = useRef<boolean>(false);
   const hasInitialFitRef = useRef<boolean>(false);
   const prevSelectedPathRef = useRef<string | null>(null);
+  const prevSelectedPathsRef = useRef<Set<string>>(new Set(multiSelectedPaths || []));
   const hasZoomedToInitialRef = useRef<boolean>(false);
-  const prevThumbnailsKeysRef = useRef<Set<string>>(new Set());
+  const ignoreNextClusterClickRef = useRef<boolean>(false);
+  const prevThumbnailsMapRef = useRef<Map<string, string>>(new Map());
   const thumbnails = useProcessStore((s) => s.thumbnails);
+  const mediumThumbnails = useProcessStore((s) => s.mediumThumbnails);
   const { t } = useTranslation();
+
+  const selectedPathsSet = useMemo(
+    () => new Set(multiSelectedPaths || []),
+    [multiSelectedPaths],
+  );
+  const selectedPathsSetRef = useRef<Set<string>>(selectedPathsSet);
+  useEffect(() => {
+    selectedPathsSetRef.current = selectedPathsSet;
+  }, [selectedPathsSet]);
+
+  const multiSelectedPathsRef = useRef<string[]>(multiSelectedPaths || []);
+  useEffect(() => {
+    multiSelectedPathsRef.current = multiSelectedPaths || [];
+  }, [multiSelectedPaths]);
+
+  const prevElevatedMarkerRef = useRef<L.Marker | null>(null);
+  const elevateMarker = useCallback((targetMarker: L.Marker | null) => {
+    if (prevElevatedMarkerRef.current && prevElevatedMarkerRef.current !== targetMarker) {
+      try {
+        if (typeof (prevElevatedMarkerRef.current as any).setZIndexOffset === 'function') {
+          prevElevatedMarkerRef.current.setZIndexOffset(0);
+        }
+        const prevEl = prevElevatedMarkerRef.current.getElement
+          ? prevElevatedMarkerRef.current.getElement()
+          : (prevElevatedMarkerRef.current as any)._icon;
+        if (prevEl) {
+          prevEl.style.zIndex = '';
+          prevEl.classList.remove('elevated-map-marker');
+        }
+      } catch {
+        // Safe fallback
+      }
+    }
+    prevElevatedMarkerRef.current = targetMarker;
+    if (targetMarker) {
+      try {
+        if (typeof (targetMarker as any).setZIndexOffset === 'function') {
+          targetMarker.setZIndexOffset(100000);
+        }
+        const el = targetMarker.getElement
+          ? targetMarker.getElement()
+          : (targetMarker as any)._icon;
+        if (el) {
+          el.style.zIndex = '100000';
+          el.classList.add('elevated-map-marker');
+        }
+      } catch {
+        // Safe fallback
+      }
+    }
+  }, []);
+
+  const photosRef = useRef(photos);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+
+  const pendingRefreshMarkersRef = useRef<L.Marker[]>([]);
+  const refreshRafRef = useRef<number | null>(null);
 
   const selectedPathRef = useRef<string | null>(selectedPath);
   useEffect(() => {
@@ -635,6 +715,11 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     onSelectPhotoRef.current = onSelectPhoto;
   }, [onSelectPhoto]);
 
+  const onDoubleClickPhotoRef = useRef(onDoubleClickPhoto);
+  useEffect(() => {
+    onDoubleClickPhotoRef.current = onDoubleClickPhoto;
+  }, [onDoubleClickPhoto]);
+
   const showThumbnailCardsRef = useRef<boolean>(showThumbnailCards);
   useEffect(() => {
     showThumbnailCardsRef.current = showThumbnailCards;
@@ -646,38 +731,74 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     hasZoomedToInitialRef.current = false;
   }, [currentFolderPath]);
 
-  const dblClickHint = t('library.map.doubleClickHint', {
-    defaultValue: 'Double click to open in Adjustments mode',
-  });
-  const revertGpsText = t('library.map.revertGpsData', {
-    defaultValue: 'Revert GPS data',
-  });
-  const dragHintText = t('library.map.dragToReposition', {
-    defaultValue: 'Drag pin to reposition',
-  });
-
-  const onRevertGpsRef = useRef(onRevertGps);
-  useEffect(() => {
-    onRevertGpsRef.current = onRevertGps;
-  }, [onRevertGps]);
-
   const onMovePhotoRef = useRef(onMovePhoto);
   useEffect(() => {
     onMovePhotoRef.current = onMovePhoto;
   }, [onMovePhoto]);
 
-  const onMapContextMenuRef = useRef(onMapContextMenu);
+  const onStartRepositionRef = useRef(onStartReposition);
   useEffect(() => {
-    onMapContextMenuRef.current = onMapContextMenu;
-  }, [onMapContextMenu]);
+    onStartRepositionRef.current = onStartReposition;
+  }, [onStartReposition]);
 
-  // Round-robin mouse wheel photo cycling on clusters
+  const onRepositionSelectRef = useRef(onRepositionSelect);
+  useEffect(() => {
+    onRepositionSelectRef.current = onRepositionSelect;
+  }, [onRepositionSelect]);
+
+  const repositioningPathRef = useRef(repositioningPath);
+  useEffect(() => {
+    repositioningPathRef.current = repositioningPath;
+  }, [repositioningPath]);
+
+  const onContextMenuPhotoRef = useRef(onContextMenuPhoto);
+  useEffect(() => {
+    onContextMenuPhotoRef.current = onContextMenuPhoto;
+  }, [onContextMenuPhoto]);
+
+  // Set crosshair cursor on map container while in click-to-place repositioning mode
+  useEffect(() => {
+    const container = map.getContainer();
+    if (repositioningPath) {
+      container.style.cursor = 'crosshair';
+    } else {
+      container.style.cursor = '';
+    }
+    return () => {
+      container.style.cursor = '';
+    };
+  }, [map, repositioningPath]);
+
+  // Unified pin interaction handler: wheel cycling, background card click-to-front, smooth drag avatar, double-click to adjustments, and context menu
   useEffect(() => {
     const container = map.getContainer();
 
+    const getPinTargetPhotoPath = (pinEl: HTMLElement): string | null => {
+      const pinType = pinEl.getAttribute('data-map-pin');
+      if (pinType === 'photo') {
+        const raw = pinEl.getAttribute('data-photo-path');
+        return raw ? decodeURIComponent(raw) : null;
+      }
+      if (pinType === 'cluster') {
+        const clusterIdStr = pinEl.getAttribute('data-cluster-id');
+        const clusterId = clusterIdStr ? Number(clusterIdStr) : null;
+        const clusterMarker = clusterId !== null ? clustersMapRef.current.get(clusterId) : null;
+        if (clusterMarker) {
+          const childMarkers = clusterMarker.getAllChildMarkers();
+          const childPhotos = childMarkers
+            .map((m: any) => m.photoPath as string)
+            .filter(Boolean);
+          let activeIdx = (clusterMarker as any)._activePhotoIndex ?? 0;
+          if (activeIdx < 0 || activeIdx >= childPhotos.length) activeIdx = 0;
+          return childPhotos[activeIdx] || childPhotos[0] || null;
+        }
+      }
+      return null;
+    };
+
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
-      const clusterEl = target?.closest('[data-cluster-id]') as HTMLElement | null;
+      const clusterEl = target?.closest('[data-map-pin="cluster"]') as HTMLElement | null;
       if (!clusterEl) return;
 
       const clusterIdStr = clusterEl.getAttribute('data-cluster-id');
@@ -700,6 +821,8 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       e.preventDefault();
       e.stopPropagation();
 
+      elevateMarker(clusterMarker);
+
       let currentIdx = (clusterMarker as any)._activePhotoIndex ?? -1;
       if (currentIdx === -1 && selectedPathRef.current) {
         currentIdx = childPhotos.indexOf(selectedPathRef.current);
@@ -708,7 +831,9 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         currentIdx = 0;
       }
 
-      const direction = e.deltaY > 0 ? 1 : -1;
+      // Rolling forward (deltaY < 0) increments numerator (e.g. 3/12 -> 4/12)
+      // Rolling backward (deltaY > 0) decrements numerator (e.g. 4/12 -> 3/12)
+      const direction = e.deltaY < 0 ? 1 : -1;
       const nextIdx = (currentIdx + direction + childPhotos.length) % childPhotos.length;
       (clusterMarker as any)._activePhotoIndex = nextIdx;
       const nextPath = childPhotos[nextIdx];
@@ -719,9 +844,9 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
       // Update cluster thumbnail & badge directly in DOM for instant response
       const imgEl = clusterEl.querySelector('img');
-      const thumbs = useProcessStore.getState().thumbnails;
-      if (imgEl && thumbs[nextPath]) {
-        imgEl.src = thumbs[nextPath];
+      const thumb = getBestThumbnail(nextPath);
+      if (imgEl) {
+        imgEl.src = thumb || '';
       }
       const badgeEl = clusterEl.querySelector('[data-cluster-badge]');
       if (badgeEl) {
@@ -729,37 +854,326 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       }
 
       isWheelSelectingRef.current = true;
+      useLibraryStore.getState().setLibrary({
+        multiSelectedPaths: [nextPath],
+        libraryActivePath: nextPath,
+        selectionAnchorPath: nextPath,
+      });
+      const photoObj = useLibraryStore.getState().imageList.find((p) => p.path === nextPath);
+      if (photoObj) {
+        useEditorStore.getState().setEditor({ selectedImage: photoObj });
+      }
       onSelectPhotoRef.current(nextPath, new MouseEvent('click'));
       setTimeout(() => {
         isWheelSelectingRef.current = false;
       }, 150);
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false, capture: true });
-    return () => {
-      container.removeEventListener('wheel', handleWheel, { capture: true } as any);
-    };
-  }, [map]);
+    const handlePinMouseDown = (e: MouseEvent) => {
+      // Only primary left button without Alt
+      if (e.button !== 0 || e.altKey) return;
 
-  // Attach popup click handler for reverting GPS and map contextmenu handler
-  useEffect(() => {
-    const handlePopupOpen = (e: L.PopupEvent) => {
-      const el = e.popup.getElement();
-      if (!el) return;
-      const btnRevert = el.querySelector<HTMLButtonElement>('[data-action="revert-gps"]');
-      if (btnRevert) {
-        btnRevert.onclick = (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          const p = btnRevert.getAttribute('data-path');
-          if (p && onRevertGpsRef.current) {
-            onRevertGpsRef.current(p);
-            map.closePopup();
+      const target = e.target as HTMLElement | null;
+      const pinEl = target?.closest('[data-map-pin]') as HTMLElement | null;
+      if (!pinEl) return;
+
+      const pinType = pinEl.getAttribute('data-map-pin'); // 'photo' | 'cluster'
+
+      // Disable Leaflet map panning immediately so mouse interaction belongs entirely to the pin
+      map.dragging.disable();
+
+      // Check if user clicked a background stack card in a cluster to bring it to front
+      const stackCard = target?.closest('[data-stack-card]') as HTMLElement | null;
+      if (pinType === 'cluster' && stackCard) {
+        e.preventDefault();
+        e.stopPropagation();
+        ignoreNextClusterClickRef.current = true;
+
+        const clusterIdStr = pinEl.getAttribute('data-cluster-id');
+        const clusterId = clusterIdStr ? Number(clusterIdStr) : null;
+        const clusterMarker = clusterId !== null ? clustersMapRef.current.get(clusterId) : null;
+        if (clusterMarker) {
+          const childMarkers = clusterMarker.getAllChildMarkers();
+          const childPhotos: string[] = childMarkers
+            .map((m: any) => m.photoPath as string)
+            .filter(Boolean);
+
+          if (childPhotos.length > 1) {
+            const stackNum = Number(stackCard.getAttribute('data-stack-card') || '1');
+            let currentIdx = (clusterMarker as any)._activePhotoIndex ?? 0;
+            const nextIdx = (currentIdx + stackNum) % childPhotos.length;
+            (clusterMarker as any)._activePhotoIndex = nextIdx;
+            const nextPath = childPhotos[nextIdx];
+
+            if (onRequestThumbnailsRef.current) {
+              onRequestThumbnailsRef.current([nextPath]);
+            }
+
+            const imgEl = pinEl.querySelector('img');
+            const thumb = getBestThumbnail(nextPath);
+            if (imgEl) {
+              imgEl.src = thumb || '';
+            }
+            const badgeEl = pinEl.querySelector('[data-cluster-badge]');
+            if (badgeEl) {
+              badgeEl.textContent = `${nextIdx + 1}/${childPhotos.length}`;
+            }
+
+            useLibraryStore.getState().setLibrary({
+              multiSelectedPaths: [nextPath],
+              libraryActivePath: nextPath,
+              selectionAnchorPath: nextPath,
+            });
+            const photoObj = useLibraryStore.getState().imageList.find((p) => p.path === nextPath);
+            if (photoObj) {
+              useEditorStore.getState().setEditor({ selectedImage: photoObj });
+            }
+            onSelectPhotoRef.current(nextPath, new MouseEvent('click'));
           }
+        }
+
+        const onStackMouseUp = () => {
+          window.removeEventListener('mouseup', onStackMouseUp, true);
+          map.dragging.enable();
         };
+        window.addEventListener('mouseup', onStackMouseUp, true);
+        return;
+      }
+
+      // Front card of cluster or standalone photo pin
+      const targetPhotoPath = getPinTargetPhotoPath(pinEl);
+      if (!targetPhotoPath) {
+        map.dragging.enable();
+        return;
+      }
+
+      const photoToDrag = targetPhotoPath;
+      const isPhotoSelected = selectedPathsSetRef.current.has(photoToDrag);
+      const currentMulti = multiSelectedPathsRef.current;
+      const pathsToMove =
+        isPhotoSelected && currentMulti.length > 1 ? currentMulti : [photoToDrag];
+
+      // Measure card bounds so the dragged avatar maintains exact cursor-to-thumbnail position
+      const cardEl = (pinEl.querySelector('[data-front-card="true"]') ||
+        pinEl.firstElementChild) as HTMLElement | null;
+      const cardRect = cardEl ? cardEl.getBoundingClientRect() : pinEl.getBoundingClientRect();
+      const grabOffsetX = e.clientX - cardRect.left;
+      const grabOffsetY = e.clientY - cardRect.top;
+
+      const isThumbnailMode = showThumbnailCardsRef.current;
+      const pinWidth = isThumbnailMode ? 96 : 28;
+      const pinHeight = isThumbnailMode ? 106 : 36;
+      const anchorX = isThumbnailMode ? 48 : 14;
+      const anchorY = isThumbnailMode ? 106 : 36;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let isDragging = false;
+      let avatarEl: HTMLDivElement | null = null;
+
+      const onMouseMove = (moveEv: MouseEvent) => {
+        const dx = moveEv.clientX - startX;
+        const dy = moveEv.clientY - startY;
+        if (!isDragging && Math.hypot(dx, dy) > 4) {
+          isDragging = true;
+          pinEl.style.opacity = '0.4';
+
+          avatarEl = document.createElement('div');
+          avatarEl.className = 'photo-drag-avatar';
+          avatarEl.style.cssText = `
+            position: fixed;
+            left: ${moveEv.clientX - grabOffsetX}px;
+            top: ${moveEv.clientY - grabOffsetY}px;
+            width: ${pinWidth}px;
+            height: ${pinHeight}px;
+            pointer-events: none;
+            z-index: 9999999;
+            filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.7));
+          `;
+
+          const activeThumb = getBestThumbnail(photoToDrag);
+          const countBadge =
+            pathsToMove.length > 1
+              ? `
+            <div style="
+              position: absolute;
+              top: 4px;
+              right: 4px;
+              background: #0284c7;
+              color: #ffffff;
+              font-size: 11px;
+              font-weight: 800;
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+              padding: 2px 6px;
+              border-radius: 9999px;
+              border: 1.5px solid #38bdf8;
+              box-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
+              display: flex;
+              align-items: center;
+              gap: 3px;
+              z-index: 10;
+              pointer-events: none;
+              user-select: none;
+            ">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                <polyline points="2 17 12 22 22 17"/>
+                <polyline points="2 12 12 17 22 12"/>
+              </svg>
+              <span>${pathsToMove.length}</span>
+            </div>
+            `
+              : '';
+
+          if (isThumbnailMode) {
+            avatarEl.innerHTML = `
+              <div style="
+                width: 96px;
+                height: 96px;
+                border-radius: 12px;
+                border: 3px solid #38bdf8;
+                overflow: hidden;
+                background-color: #0b0f19;
+                box-shadow: 0 0 20px rgba(56, 189, 248, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+              ">
+                ${
+                  activeThumb
+                    ? `<img src="${activeThumb}" style="width: 100%; height: 100%; object-fit: cover; display: block;" draggable="false" />`
+                    : `<div style="color: #38bdf8; font-size: 11px; font-weight: 600;">${
+                        pathsToMove.length > 1 ? `Moving ${pathsToMove.length}...` : 'Moving...'
+                      }</div>`
+                }
+                ${countBadge}
+              </div>
+              <div style="
+                width: 0;
+                height: 0;
+                border-left: 9px solid transparent;
+                border-right: 9px solid transparent;
+                border-top: 10px solid #38bdf8;
+                margin-left: auto;
+                margin-right: auto;
+                margin-top: -1px;
+              "></div>
+            `;
+          } else {
+            avatarEl.innerHTML = `
+              <div style="filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.9)); width: 28px; height: 36px; display: inline-block;">
+                <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M14 0C6.268 0 0 6.268 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.268 21.732 0 14 0Z" fill="#38bdf8"/>
+                  <circle cx="14" cy="14" r="11" fill="#0f172a"/>
+                  <circle cx="14" cy="14" r="5" fill="#38bdf8"/>
+                </svg>
+              </div>
+            `;
+          }
+          document.body.appendChild(avatarEl);
+        }
+
+        if (isDragging && avatarEl) {
+          avatarEl.style.left = `${moveEv.clientX - grabOffsetX}px`;
+          avatarEl.style.top = `${moveEv.clientY - grabOffsetY}px`;
+        }
+      };
+
+      const onMouseUp = (upEv: MouseEvent) => {
+        window.removeEventListener('mousemove', onMouseMove, true);
+        window.removeEventListener('mouseup', onMouseUp, true);
+
+        map.dragging.enable();
+        pinEl.style.opacity = '1';
+
+        if (avatarEl && avatarEl.parentNode) {
+          avatarEl.parentNode.removeChild(avatarEl);
+          avatarEl = null;
+        }
+
+        if (isDragging) {
+          upEv.preventDefault();
+          upEv.stopPropagation();
+          ignoreNextClusterClickRef.current = true;
+
+          const avatarLeft = upEv.clientX - grabOffsetX;
+          const avatarTop = upEv.clientY - grabOffsetY;
+          const triangleTipX = avatarLeft + anchorX;
+          const triangleTipY = avatarTop + anchorY;
+
+          const mapContainer = map.getContainer();
+          const rect = mapContainer.getBoundingClientRect();
+          const pt = L.point(triangleTipX - rect.left, triangleTipY - rect.top);
+          const dropLatLng = map.containerPointToLatLng(pt);
+          const lat = dropLatLng.lat;
+          const lon = ((((dropLatLng.lng + 180) % 360) + 360) % 360) - 180;
+
+          useLibraryStore.getState().setLibrary({
+            multiSelectedPaths: pathsToMove,
+            libraryActivePath: photoToDrag,
+            selectionAnchorPath: photoToDrag,
+          });
+          const photoObj = useLibraryStore.getState().imageList.find((p) => p.path === photoToDrag);
+          if (photoObj) {
+            useEditorStore.getState().setEditor({ selectedImage: photoObj });
+          }
+
+          if (onMovePhotoRef.current) {
+            onMovePhotoRef.current(pathsToMove, lat, lon);
+          }
+        } else {
+          // Clean click selection (supports Ctrl, Shift, Meta via onSelectPhoto)
+          onSelectPhotoRef.current(photoToDrag, upEv);
+        }
+      };
+
+      window.addEventListener('mousemove', onMouseMove, true);
+      window.addEventListener('mouseup', onMouseUp, true);
+    };
+
+    const handlePinDblClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const pinEl = target?.closest('[data-map-pin]') as HTMLElement | null;
+      if (!pinEl) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const targetPhotoPath = getPinTargetPhotoPath(pinEl);
+      if (targetPhotoPath && onDoubleClickPhotoRef.current) {
+        onDoubleClickPhotoRef.current(targetPhotoPath);
       }
     };
 
+    const handlePinContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const pinEl = target?.closest('[data-map-pin]') as HTMLElement | null;
+      if (!pinEl) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const targetPhotoPath = getPinTargetPhotoPath(pinEl);
+      if (targetPhotoPath && onContextMenuPhotoRef.current) {
+        onContextMenuPhotoRef.current(e, targetPhotoPath);
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    container.addEventListener('mousedown', handlePinMouseDown, { capture: true });
+    container.addEventListener('dblclick', handlePinDblClick, { capture: true });
+    container.addEventListener('contextmenu', handlePinContextMenu, { capture: true });
+    return () => {
+      container.removeEventListener('wheel', handleWheel, { capture: true } as any);
+      container.removeEventListener('mousedown', handlePinMouseDown, { capture: true } as any);
+      container.removeEventListener('dblclick', handlePinDblClick, { capture: true } as any);
+      container.removeEventListener('contextmenu', handlePinContextMenu, { capture: true } as any);
+    };
+  }, [map, elevateMarker]);
+
+  // Attach map click and contextmenu handlers
+  useEffect(() => {
     const handleContextMenu = (e: L.LeafletMouseEvent) => {
       if (onMapContextMenuRef.current) {
         onMapContextMenuRef.current(
@@ -771,22 +1185,34 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       }
     };
 
-    map.on('popupopen', handlePopupOpen);
+    const handleMapClick = (e: L.LeafletMouseEvent) => {
+      if (repositioningPathRef.current && onRepositionSelectRef.current) {
+        onRepositionSelectRef.current(
+          e.latlng.lat,
+          ((((e.latlng.lng + 180) % 360) + 360) % 360) - 180,
+        );
+      }
+    };
+
     map.on('contextmenu', handleContextMenu);
+    map.on('click', handleMapClick);
     return () => {
-      map.off('popupopen', handlePopupOpen);
       map.off('contextmenu', handleContextMenu);
+      map.off('click', handleMapClick);
     };
   }, [map]);
 
   // Initialize marker cluster once into reactive state with controlled click behavior and photo icons
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
-      chunkedLoading: true,
-      maxClusterRadius: 60,
+      chunkedLoading: false,
+      maxClusterRadius: 50,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: false,
+      animate: false,
+      animateAddingMarkers: false,
+      disableClusteringAtZoom: 18,
       iconCreateFunction: (c: L.MarkerCluster) => {
         const count = c.getChildCount();
         const clusterId = (c as any)._leaflet_id;
@@ -798,13 +1224,15 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           .filter(Boolean);
 
         let activeIdx = (c as any)._activePhotoIndex;
-        if (activeIdx === undefined) {
+        if (activeIdx === undefined || activeIdx >= childPaths.length || activeIdx < 0) {
+          let foundIdx = -1;
           if (selectedPathRef.current) {
-            const foundIdx = childPaths.indexOf(selectedPathRef.current);
-            activeIdx = foundIdx !== -1 ? foundIdx : 0;
-          } else {
-            activeIdx = 0;
+            foundIdx = childPaths.indexOf(selectedPathRef.current);
           }
+          if (foundIdx === -1) {
+            foundIdx = childPaths.findIndex((p) => selectedPathsSetRef.current.has(p));
+          }
+          activeIdx = foundIdx !== -1 ? foundIdx : 0;
           (c as any)._activePhotoIndex = activeIdx;
         }
 
@@ -814,66 +1242,52 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           return createCompactClusterPin(count, clusterId);
         }
 
-        const currentThumbs = useProcessStore.getState().thumbnails;
-        let cachedThumbUrl: string | null = (activePath && currentThumbs[activePath]) || null;
+        let cachedThumbUrl: string | null = (activePath && getBestThumbnail(activePath)) || null;
         if (!cachedThumbUrl) {
           for (let i = 0; i < childPaths.length; i++) {
             const p = childPaths[i];
-            if (p && currentThumbs[p]) {
-              cachedThumbUrl = currentThumbs[p];
+            const found = p && getBestThumbnail(p);
+            if (found) {
+              cachedThumbUrl = found;
               break;
             }
           }
         }
 
+        const isSelected = childPaths.some((p) => selectedPathsSetRef.current.has(p));
+
         if (cachedThumbUrl) {
-          return createClusterThumbnailPin(cachedThumbUrl, count, clusterId, activeIdx);
+          return createClusterThumbnailPin(cachedThumbUrl, count, clusterId, activeIdx, isSelected);
         }
 
-        return createClusterLoadingPin(count, clusterId, activeIdx);
+        return createClusterLoadingPin(count, clusterId, activeIdx, isSelected);
       },
     });
 
     const handleClusterClick = (e: L.LeafletEvent) => {
+      if (ignoreNextClusterClickRef.current) {
+        ignoreNextClusterClickRef.current = false;
+        return;
+      }
       const clusterMarker = (e as any).layer as L.MarkerCluster;
       if (!clusterMarker) return;
 
-      const bounds = clusterMarker.getBounds();
-      const ne = bounds.getNorthEast();
-      const sw = bounds.getSouthWest();
-      const distance = ne.distanceTo(sw); // distance in meters across photos in cluster
+      elevateMarker(clusterMarker);
 
-      if (distance > 15 && map.getZoom() < 17) {
-        map.fitBounds(bounds, { maxZoom: 17, padding: [40, 40] });
-      } else {
-        const childMarkers = clusterMarker.getAllChildMarkers();
-        const childPaths = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
-        if (childPaths.length > 0) {
-          let currIdx = (clusterMarker as any)._activePhotoIndex ?? 0;
-          const nextIdx = (currIdx + 1) % childPaths.length;
-          (clusterMarker as any)._activePhotoIndex = nextIdx;
-          const nextPath = childPaths[nextIdx];
+      const childMarkers = clusterMarker.getAllChildMarkers();
+      const childPaths = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
+      if (childPaths.length === 0) return;
 
-          const el = clusterMarker.getElement();
-          if (el) {
-            const imgEl = el.querySelector('img');
-            const thumbs = useProcessStore.getState().thumbnails;
-            if (imgEl && thumbs[nextPath]) {
-              imgEl.src = thumbs[nextPath];
-            }
-            const badgeEl = el.querySelector('[data-cluster-badge]');
-            if (badgeEl) {
-              badgeEl.textContent = `${nextIdx + 1}/${childPaths.length}`;
-            }
-          }
+      let activeIdx = (clusterMarker as any)._activePhotoIndex ?? 0;
+      if (activeIdx < 0 || activeIdx >= childPaths.length) activeIdx = 0;
+      const activePath = childPaths[activeIdx] || childPaths[0];
 
-          isWheelSelectingRef.current = true;
-          onSelectPhotoRef.current(nextPath, new MouseEvent('click'));
-          setTimeout(() => {
-            isWheelSelectingRef.current = false;
-          }, 150);
-        }
+      const photoObj = useLibraryStore.getState().imageList.find((p) => p.path === activePath);
+      if (photoObj) {
+        useEditorStore.getState().setEditor({ selectedImage: photoObj });
       }
+
+      onSelectPhotoRef.current(activePath, (e as any).originalEvent || new MouseEvent('click'));
     };
 
     clusterGroup.on('clusterclick', handleClusterClick);
@@ -882,6 +1296,10 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     setCluster(clusterGroup);
 
     return () => {
+      if (refreshRafRef.current !== null) {
+        cancelAnimationFrame(refreshRafRef.current);
+        refreshRafRef.current = null;
+      }
       clusterGroup.off('clusterclick', handleClusterClick);
       clusterGroup.clearLayers();
       map.removeLayer(clusterGroup);
@@ -889,7 +1307,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       markersMapRef.current.clear();
       setCluster(null);
     };
-  }, [map]);
+  }, [map, elevateMarker]);
 
   // Lazy request visible thumbnails for standalone pins and cluster representatives in viewport
   const requestVisibleThumbnails = useCallback(() => {
@@ -897,11 +1315,11 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
     try {
       const bounds = map.getBounds();
-      const currentThumbs = useProcessStore.getState().thumbnails;
+      const hasThumb = (p: string) => Boolean(getBestThumbnail(p));
       const missing: string[] = [];
       const seenClusters = new Set<any>();
 
-      for (const photo of photos) {
+      for (const photo of photosRef.current) {
         if (missing.length >= 30) break;
 
         const marker = markersMapRef.current.get(photo.path);
@@ -915,7 +1333,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
         if (visibleParent === marker) {
           // Standalone visible pin
-          if (!currentThumbs[photo.path] && !missing.includes(photo.path)) {
+          if (!hasThumb(photo.path) && !missing.includes(photo.path)) {
             missing.push(photo.path);
           }
         } else {
@@ -927,13 +1345,13 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           const childMarkers = (visibleParent as L.MarkerCluster).getAllChildMarkers();
           const hasAnyCachedThumb = childMarkers.some((m) => {
             const p = (m as any).photoPath;
-            return p && Boolean(currentThumbs[p]);
+            return p && hasThumb(p);
           });
 
           if (!hasAnyCachedThumb && childMarkers.length > 0) {
             // Request ONLY ONE photo for the whole cluster!
             const repPath = (childMarkers[0] as any)?.photoPath;
-            if (repPath && !currentThumbs[repPath] && !missing.includes(repPath)) {
+            if (repPath && !hasThumb(repPath) && !missing.includes(repPath)) {
               missing.push(repPath);
             }
           }
@@ -946,52 +1364,12 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     } catch {
       // Map may not be ready or bounds invalid
     }
-  }, [showThumbnailCards, onRequestThumbnails, map, cluster, photos]);
-
-  // Listen for double click and context menu inside popup cards
-  useEffect(() => {
-    const container = map.getContainer();
-
-    const handlePopupDblClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      const popupCard = target?.closest('[data-photo-path]') as HTMLElement | null;
-      if (popupCard) {
-        const path = popupCard.getAttribute('data-photo-path');
-        if (path) {
-          e.preventDefault();
-          e.stopPropagation();
-          onDoubleClickPhoto(path);
-        }
-      }
-    };
-
-    const handlePopupContextMenu = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      const popupCard = target?.closest('[data-photo-path]') as HTMLElement | null;
-      if (popupCard) {
-        const path = popupCard.getAttribute('data-photo-path');
-        if (path) {
-          e.preventDefault();
-          e.stopPropagation();
-          onContextMenuPhoto(e, path);
-        }
-      }
-    };
-
-    container.addEventListener('dblclick', handlePopupDblClick, true);
-    container.addEventListener('contextmenu', handlePopupContextMenu, true);
-
-    return () => {
-      container.removeEventListener('dblclick', handlePopupDblClick, true);
-      container.removeEventListener('contextmenu', handlePopupContextMenu, true);
-    };
-  }, [map, onDoubleClickPhoto, onContextMenuPhoto]);
+  }, [showThumbnailCards, onRequestThumbnails, map, cluster]);
 
   // Manage markers in cluster reactivity (never out-of-sync)
   useEffect(() => {
     if (!cluster) return;
 
-    const currentThumbs = useProcessStore.getState().thumbnails;
     const currentPaths = new Set(photos.map((p) => p.path));
     const existingMarkers = markersMapRef.current;
 
@@ -1007,71 +1385,33 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       cluster.removeLayers(markersToRemove);
     }
 
-    // 2. Add markers for photos not yet inside the cluster
+    // 2. Add or update markers in batch
     const markersToAdd: L.Marker[] = [];
+    const markersToReposition: L.Marker[] = [];
+
     photos.forEach((photo) => {
       let marker = existingMarkers.get(photo.path);
 
       if (!marker) {
-        const isSelected = selectedPath === photo.path;
-        const cachedThumb = currentThumbs[photo.path];
+        const isSelected = selectedPathsSet.has(photo.path);
+        const cachedThumb = getBestThumbnail(photo.path);
 
         const icon = !showThumbnailCards
-          ? createCustomPin(isSelected, photo.isRaw)
+          ? createCustomPin(isSelected, photo.isRaw, photo.path)
           : cachedThumb
-            ? createPhotoThumbnailPin(cachedThumb, isSelected, photo.isRaw, photo.filename)
-            : createThumbnailLoadingPin(isSelected, photo.isRaw, photo.filename);
+            ? createPhotoThumbnailPin(cachedThumb, isSelected, photo.isRaw, photo.filename, photo.path)
+            : createThumbnailLoadingPin(isSelected, photo.isRaw, photo.filename, photo.path);
 
         marker = L.marker([photo.lat, photo.lon], {
           icon,
           title: photo.filename,
-          draggable: true,
-          autoPan: true,
+          draggable: false,
+          autoPan: false,
         });
         (marker as any).photoPath = photo.path;
 
-        marker.bindPopup(
-          buildPopupHtml(photo, cachedThumb, dblClickHint, revertGpsText, dragHintText),
-          {
-            closeButton: true,
-            autoPan: true,
-            maxWidth: 540,
-            minWidth: 440,
-          },
-        );
-
-        marker.on('dragstart', () => {
-          map.closePopup();
-        });
-
-        marker.on('dragend', (e: L.LeafletEvent) => {
-          const target = e.target as L.Marker;
-          const newLatLng = target.getLatLng();
-          const lat = newLatLng.lat;
-          const lon = ((((newLatLng.lng + 180) % 360) + 360) % 360) - 180;
-          if (onMovePhotoRef.current) {
-            onMovePhotoRef.current(photo.path, lat, lon);
-          }
-        });
-
-        marker.on('click', (e: L.LeafletMouseEvent) => {
-          onSelectPhoto(photo.path, e.originalEvent);
-          if (!useProcessStore.getState().thumbnails[photo.path] && onRequestThumbnails) {
-            onRequestThumbnails([photo.path]);
-          }
-        });
-
-        marker.on('dblclick', (e: L.LeafletMouseEvent) => {
-          L.DomEvent.stop(e);
-          onDoubleClickPhoto(photo.path);
-        });
-
-        marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
-          L.DomEvent.stop(e);
-          onContextMenuPhoto(e.originalEvent, photo.path);
-        });
-
         existingMarkers.set(photo.path, marker);
+        markersToAdd.push(marker);
       } else {
         (marker as any).photoPath = photo.path;
         const curLatLng = marker.getLatLng();
@@ -1079,20 +1419,21 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           Math.abs(curLatLng.lat - photo.lat) > 1e-6 ||
           Math.abs(curLatLng.lng - photo.lon) > 1e-6
         ) {
-          cluster.removeLayer(marker);
-          marker.setLatLng([photo.lat, photo.lon]);
-          cluster.addLayer(marker);
+          markersToReposition.push(marker);
         }
-        const cachedThumb = currentThumbs[photo.path];
-        marker.setPopupContent(
-          buildPopupHtml(photo, cachedThumb, dblClickHint, revertGpsText, dragHintText),
-        );
-      }
-
-      if (!cluster.hasLayer(marker)) {
-        markersToAdd.push(marker);
       }
     });
+
+    if (markersToReposition.length > 0) {
+      cluster.removeLayers(markersToReposition);
+      for (const m of markersToReposition) {
+        const p = photos.find((ph) => ph.path === (m as any).photoPath);
+        if (p) {
+          m.setLatLng([p.lat, p.lon]);
+        }
+      }
+      cluster.addLayers(markersToReposition);
+    }
 
     if (markersToAdd.length > 0) {
       cluster.addLayers(markersToAdd);
@@ -1105,16 +1446,10 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       hasInitialFitRef.current = true;
       if (selectedPhoto) {
         hasZoomedToInitialRef.current = true;
-        const targetMarker = markersMapRef.current.get(selectedPhoto.path);
         const targetZoom = 16;
         map.setView([selectedPhoto.lat, selectedPhoto.lon], targetZoom);
-        if (targetMarker) {
-          const visibleParent = cluster ? cluster.getVisibleParent(targetMarker) : targetMarker;
-          if (!cluster || visibleParent === targetMarker) {
-            targetMarker.openPopup();
-          }
-        }
       } else {
+        hasZoomedToInitialRef.current = true;
         try {
           const latLngs = photos.map((p) => [p.lat, p.lon] as [number, number]);
           const bounds = L.latLngBounds(latLngs);
@@ -1129,15 +1464,14 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   }, [
     cluster,
     photos,
+    selectedPath,
     onSelectPhoto,
     onDoubleClickPhoto,
     onContextMenuPhoto,
     onRequestThumbnails,
     map,
-    dblClickHint,
-    revertGpsText,
-    dragHintText,
     showThumbnailCards,
+    elevateMarker,
   ]);
 
   // Debounced listener to request thumbnails only for visible standalone pins
@@ -1147,16 +1481,12 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     const debouncedReq = debounce(requestVisibleThumbnails, 250);
     map.on('moveend', debouncedReq);
     map.on('zoomend', debouncedReq);
-    cluster.on('animationend', debouncedReq);
-    cluster.on('spiderfied', debouncedReq);
 
     const timer = setTimeout(requestVisibleThumbnails, 400);
 
     return () => {
       map.off('moveend', debouncedReq);
       map.off('zoomend', debouncedReq);
-      cluster.off('animationend', debouncedReq);
-      cluster.off('spiderfied', debouncedReq);
       clearTimeout(timer);
       debouncedReq.cancel();
     };
@@ -1164,66 +1494,76 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
   // Update individual markers and clusters that receive a new thumbnail (O(1) per arriving thumb)
   useEffect(() => {
-    if (!showThumbnailCards) return;
-
     const newlyAdded: string[] = [];
-    for (const path in thumbnails) {
-      if (!prevThumbnailsKeysRef.current.has(path)) {
-        prevThumbnailsKeysRef.current.add(path);
-        newlyAdded.push(path);
+    const checkDict = (dict: Record<string, string>) => {
+      for (const path in dict) {
+        const url = dict[path];
+        if (url && prevThumbnailsMapRef.current.get(path) !== url) {
+          prevThumbnailsMapRef.current.set(path, url);
+          newlyAdded.push(path);
+        }
       }
-    }
+    };
+    checkDict(thumbnails);
+    checkDict(mediumThumbnails);
 
     if (newlyAdded.length === 0) return;
+
+    if (!showThumbnailCards) return;
 
     const markersToRefresh: L.Marker[] = [];
     for (const path of newlyAdded) {
       const marker = markersMapRef.current.get(path);
       const photo = photos.find((p) => p.path === path);
       if (marker && photo) {
-        const thumbUrl = thumbnails[path];
-        const isSelected = selectedPath === path;
-        marker.setIcon(createPhotoThumbnailPin(thumbUrl, isSelected, photo.isRaw, photo.filename));
-        marker.setPopupContent(
-          buildPopupHtml(photo, thumbUrl, dblClickHint, revertGpsText, dragHintText),
-        );
+        const thumbUrl = mediumThumbnails[path] || thumbnails[path];
+        const isSelected = selectedPathsSetRef.current.has(path);
+        marker.setIcon(createPhotoThumbnailPin(thumbUrl, isSelected, photo.isRaw, photo.filename, photo.path));
         markersToRefresh.push(marker);
       }
     }
 
     if (cluster && markersToRefresh.length > 0) {
-      try {
-        cluster.refreshClusters(markersToRefresh);
-      } catch {
-        cluster.refreshClusters();
+      pendingRefreshMarkersRef.current.push(...markersToRefresh);
+      if (refreshRafRef.current === null) {
+        refreshRafRef.current = requestAnimationFrame(() => {
+          refreshRafRef.current = null;
+          const toRefresh = pendingRefreshMarkersRef.current;
+          pendingRefreshMarkersRef.current = [];
+          if (cluster && toRefresh.length > 0) {
+            try {
+              cluster.refreshClusters(toRefresh);
+            } catch {
+              // Safe fallback
+            }
+          }
+        });
       }
     }
   }, [
     thumbnails,
+    mediumThumbnails,
     showThumbnailCards,
     photos,
     selectedPath,
-    dblClickHint,
-    revertGpsText,
-    dragHintText,
     cluster,
   ]);
 
   // Toggle between Compact Pins and Thumbnail Cards without rebuilding cluster
   useEffect(() => {
     markersMapRef.current.forEach((marker, path) => {
-      const photo = photos.find((p) => p.path === path);
+      const photo = photosRef.current.find((p) => p.path === path);
       if (!photo) return;
 
-      const isSelected = selectedPath === path;
+      const isSelected = selectedPathsSetRef.current.has(path);
       if (!showThumbnailCards) {
-        marker.setIcon(createCustomPin(isSelected, photo.isRaw));
+        marker.setIcon(createCustomPin(isSelected, photo.isRaw, photo.path));
       } else {
-        const thumb = thumbnails[path];
+        const thumb = getBestThumbnail(path);
         marker.setIcon(
           thumb
-            ? createPhotoThumbnailPin(thumb, isSelected, photo.isRaw, photo.filename)
-            : createThumbnailLoadingPin(isSelected, photo.isRaw, photo.filename),
+            ? createPhotoThumbnailPin(thumb, isSelected, photo.isRaw, photo.filename, photo.path)
+            : createThumbnailLoadingPin(isSelected, photo.isRaw, photo.filename, photo.path),
         );
       }
     });
@@ -1231,30 +1571,74 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     if (cluster) {
       cluster.refreshClusters();
     }
-  }, [showThumbnailCards, photos, selectedPath, thumbnails, cluster]);
+  }, [showThumbnailCards, cluster]);
 
-  // Highlight and smooth flyTo selected photo
+  // Highlight, elevate, and smooth flyTo selected photo(s)
   useEffect(() => {
-    // Un-highlight previous
-    if (prevSelectedPathRef.current && prevSelectedPathRef.current !== selectedPath) {
-      const prevMarker = markersMapRef.current.get(prevSelectedPathRef.current);
-      const prevPhoto = photos.find((p) => p.path === prevSelectedPathRef.current);
-      if (prevMarker && prevPhoto) {
-        const thumb = thumbnails[prevSelectedPathRef.current];
-        prevMarker.setIcon(
-          showThumbnailCards && thumb
-            ? createPhotoThumbnailPin(thumb, false, prevPhoto.isRaw, prevPhoto.filename)
-            : showThumbnailCards
-              ? createThumbnailLoadingPin(false, prevPhoto.isRaw, prevPhoto.filename)
-              : createCustomPin(false, prevPhoto.isRaw),
+    const currentSet = new Set(multiSelectedPaths || []);
+    const prevSet = prevSelectedPathsRef.current;
+
+    const deselected: string[] = [];
+    prevSet.forEach((p) => {
+      if (!currentSet.has(p)) {
+        deselected.push(p);
+      }
+    });
+
+    const newlySelected: string[] = [];
+    currentSet.forEach((p) => {
+      if (!prevSet.has(p)) {
+        newlySelected.push(p);
+      }
+    });
+
+    prevSelectedPathsRef.current = currentSet;
+
+    // Update icons for deselected markers
+    for (const p of deselected) {
+      const marker = markersMapRef.current.get(p);
+      const photo = photos.find((ph) => ph.path === p);
+      if (marker && photo) {
+        const thumb = getBestThumbnail(p);
+        marker.setIcon(
+          !showThumbnailCards
+            ? createCustomPin(false, photo.isRaw, photo.path)
+            : thumb
+              ? createPhotoThumbnailPin(thumb, false, photo.isRaw, photo.filename, photo.path)
+              : createThumbnailLoadingPin(false, photo.isRaw, photo.filename, photo.path),
         );
       }
     }
 
-    const isDifferent = prevSelectedPathRef.current !== selectedPath;
-    prevSelectedPathRef.current = selectedPath;
+    // Update icons for newly selected markers
+    for (const p of newlySelected) {
+      const marker = markersMapRef.current.get(p);
+      const photo = photos.find((ph) => ph.path === p);
+      if (marker && photo) {
+        const thumb = getBestThumbnail(p);
+        marker.setIcon(
+          !showThumbnailCards
+            ? createCustomPin(true, photo.isRaw, photo.path)
+            : thumb
+              ? createPhotoThumbnailPin(thumb, true, photo.isRaw, photo.filename, photo.path)
+              : createThumbnailLoadingPin(true, photo.isRaw, photo.filename, photo.path),
+        );
+      }
+    }
 
-    if (!selectedPath) return;
+    // If any selection changes happened and we have clusters, refresh them
+    if (cluster && (deselected.length > 0 || newlySelected.length > 0)) {
+      try {
+        cluster.refreshClusters();
+      } catch {
+        // Safe fallback
+      }
+    }
+
+    if (!selectedPath) {
+      elevateMarker(null);
+      return;
+    }
 
     // If selection was triggered by mouse wheel cycling inside a cluster, do not fly or spiderfy
     if (isWheelSelectingRef.current) return;
@@ -1263,51 +1647,52 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     const photo = photos.find((p) => p.path === selectedPath);
 
     if (marker && photo) {
-      const thumb = thumbnails[selectedPath];
+      const visibleParent = cluster ? cluster.getVisibleParent(marker) : marker;
+      const targetToElevate = visibleParent || marker;
+
+      const thumb = getBestThumbnail(selectedPath);
       marker.setIcon(
         showThumbnailCards && thumb
-          ? createPhotoThumbnailPin(thumb, true, photo.isRaw, photo.filename)
+          ? createPhotoThumbnailPin(thumb, true, photo.isRaw, photo.filename, photo.path)
           : showThumbnailCards
-            ? createThumbnailLoadingPin(true, photo.isRaw, photo.filename)
-            : createCustomPin(true, photo.isRaw),
+            ? createThumbnailLoadingPin(true, photo.isRaw, photo.filename, photo.path)
+            : createCustomPin(true, photo.isRaw, photo.path),
       );
+      elevateMarker(targetToElevate);
 
-      const targetZoom = Math.max(map.getZoom(), 16);
-
-      if (!hasZoomedToInitialRef.current || isDifferent) {
-        hasZoomedToInitialRef.current = true;
-        const visibleParent = cluster ? cluster.getVisibleParent(marker) : marker;
-        if (!cluster || visibleParent === marker) {
-          marker.openPopup();
-          if (map.getZoom() < targetZoom) {
-            map.flyTo([photo.lat, photo.lon], targetZoom, { duration: 0.5 });
-          }
-        } else if (visibleParent) {
-          const clusterObj = visibleParent as L.MarkerCluster;
-          const childMarkers = clusterObj.getAllChildMarkers();
-          const childPaths = childMarkers
-            .map((m: any) => m.photoPath as string)
-            .filter(Boolean);
-          const idx = childPaths.indexOf(photo.path);
-          if (idx !== -1) {
-            (clusterObj as any)._activePhotoIndex = idx;
-            const el = clusterObj.getElement();
-            if (el) {
-              const imgEl = el.querySelector('img');
-              if (imgEl && thumb) {
-                imgEl.src = thumb;
-              }
-              const badgeEl = el.querySelector('[data-cluster-badge]');
-              if (badgeEl) {
-                badgeEl.textContent = `${idx + 1}/${childPaths.length}`;
-              }
+      // Once map is already loaded and interactive, selecting/clicking photos must NOT zoom or move the map!
+      if (visibleParent && visibleParent !== marker) {
+        const clusterObj = visibleParent as L.MarkerCluster;
+        const childMarkers = clusterObj.getAllChildMarkers();
+        const childPaths = childMarkers
+          .map((m: any) => m.photoPath as string)
+          .filter(Boolean);
+        const idx = childPaths.indexOf(photo.path);
+        if (idx !== -1) {
+          (clusterObj as any)._activePhotoIndex = idx;
+          const el = clusterObj.getElement();
+          if (el) {
+            const imgEl = el.querySelector('img');
+            if (imgEl && thumb) {
+              imgEl.src = thumb;
+            }
+            const badgeEl = el.querySelector('[data-cluster-badge]');
+            if (badgeEl) {
+              badgeEl.textContent = `${idx + 1}/${childPaths.length}`;
             }
           }
-          map.panTo([photo.lat, photo.lon], { animate: true, duration: 0.4 });
         }
       }
     }
-  }, [selectedPath, photos, map, showThumbnailCards, thumbnails, cluster]);
+  }, [
+    multiSelectedPaths,
+    selectedPath,
+    photos,
+    map,
+    showThumbnailCards,
+    cluster,
+    elevateMarker,
+  ]);
 
   return null;
 };
@@ -1317,7 +1702,6 @@ interface UnlocatedPhotoCardProps {
   filename: string;
   timestamp: string | null;
   exif?: Record<string, string>;
-  thumbUrl?: string;
   isSelected: boolean;
   cardHeight: number;
   onSelect: (e: React.MouseEvent) => void;
@@ -1334,7 +1718,6 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
     filename,
     timestamp,
     exif,
-    thumbUrl,
     isSelected,
     cardHeight,
     onSelect,
@@ -1344,6 +1727,10 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
     onDragEnd,
     onRequestThumb,
   }) => {
+    const thumbUrl = useProcessStore(
+      (s) => s.mediumThumbnails[photo.path] || s.thumbnails[photo.path],
+    );
+
     useEffect(() => {
       if (!thumbUrl) {
         onRequestThumb(photo.path);
@@ -1468,6 +1855,54 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
     );
   },
 );
+
+const UnlocatedDockRow = React.memo((props: any) => {
+  const {
+    index,
+    style,
+    unlocatedPhotos,
+    selectedDockPaths,
+    effectiveSelectedPath,
+    localExifMap,
+    dockWidth,
+    handlePhotoSelect,
+    onImageDoubleClick,
+    onContextMenu,
+    handlePhotoDragStart,
+    handlePhotoDragEnd,
+    queueThumbnailRequest,
+  } = props;
+
+  const photo = unlocatedPhotos[index];
+  if (!photo) return null;
+
+  const isSelected =
+    selectedDockPaths.has(photo.path) ||
+    (selectedDockPaths.size === 0 && effectiveSelectedPath === photo.path);
+  const filename = photo.path.split(/[\\/]/).pop() || '';
+  const timestamp = getImageTimestamp(photo, localExifMap[photo.path]);
+  const exif = localExifMap[photo.path] || photo.exif;
+  const cardHeight = Math.max(120, dockWidth - 16);
+
+  return (
+    <div style={style} className="px-2 py-1 box-border">
+      <UnlocatedPhotoCard
+        photo={photo}
+        filename={filename}
+        timestamp={timestamp}
+        exif={exif}
+        isSelected={isSelected}
+        cardHeight={cardHeight}
+        onSelect={(e) => handlePhotoSelect(photo.path, e)}
+        onDoubleClick={() => onImageDoubleClick?.(photo.path)}
+        onContextMenu={(e) => onContextMenu?.(e, photo.path)}
+        onDragStart={(e) => handlePhotoDragStart(photo, e)}
+        onDragEnd={handlePhotoDragEnd}
+        onRequestThumb={queueThumbnailRequest}
+      />
+    </div>
+  );
+});
 
 interface MapControlsProps {
   onFitBounds: () => void;
@@ -1636,6 +2071,7 @@ export default function MapView(props: MapViewProps) {
   const [isDockOpen, setIsDockOpen] = useState<boolean>(getInitialDockOpen);
   const [dockWidth, setDockWidth] = useState<number>(getInitialDockWidth);
   const [selectedDockPaths, setSelectedDockPaths] = useState<Set<string>>(new Set());
+  const [repositioningPhotoPath, setRepositioningPhotoPath] = useState<string | null>(null);
   const [isDraggingOverMap, setIsDraggingOverMap] = useState<boolean>(false);
   const [mapContextMenu, setMapContextMenu] = useState<{
     x: number;
@@ -1645,7 +2081,15 @@ export default function MapView(props: MapViewProps) {
     targetPaths: string[];
   } | null>(null);
 
-  const [localExifMap, setLocalExifMap] = useState<Record<string, Record<string, string>>>({});
+  const [localExifMap, setLocalExifMap] = useState<Record<string, Record<string, string>>>(() => {
+    const initial: Record<string, Record<string, string>> = {};
+    for (const img of props.imageList || []) {
+      if (img.exif) {
+        initial[img.path] = img.exif;
+      }
+    }
+    return initial;
+  });
   const requestedExifRef = useRef<Set<string>>(new Set());
   const mapRef = useRef<L.Map | null>(null);
   const isResizing = useRef(false);
@@ -1658,8 +2102,28 @@ export default function MapView(props: MapViewProps) {
   useEffect(() => {
     dockWidthRef.current = dockWidth;
   }, [dockWidth]);
-  const thumbnails = useProcessStore((s) => s.thumbnails);
-  const mediumThumbnails = useProcessStore((s) => s.mediumThumbnails);
+
+  const dockListContainerRef = useRef<HTMLDivElement>(null);
+  const [dockListHeight, setDockListHeight] = useState(0);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      if (dockListContainerRef.current) {
+        setDockListHeight(dockListContainerRef.current.clientHeight);
+      }
+    };
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    if (dockListContainerRef.current) {
+      observer.observe(dockListContainerRef.current);
+    }
+    window.addEventListener('resize', updateHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, [isDockOpen]);
+
   const { t } = useTranslation();
 
   const handleTileStyleChange = useCallback((style: MapStyle) => {
@@ -1810,10 +2274,27 @@ export default function MapView(props: MapViewProps) {
     requestedExifRef.current.clear();
     setLocalExifMap({});
     setSelectedDockPaths(new Set());
+    setRepositioningPhotoPath(null);
     setMapContextMenu(null);
     undoStackRef.current = [];
     setCanUndo(false);
   }, [currentFolderPath]);
+
+  // Sync localExifMap when imageList in store is updated (e.g. Reset Adjustments or Revert GPS)
+  useEffect(() => {
+    if (!imageList || imageList.length === 0) return;
+    setLocalExifMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const img of imageList) {
+        if (img.exif && next[img.path] !== img.exif) {
+          next[img.path] = img.exif;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [imageList]);
 
   // Non-blocking, smooth EXIF ingestion without continuous UI re-sorting loops
   useEffect(() => {
@@ -1827,7 +2308,6 @@ export default function MapView(props: MapViewProps) {
     let isCancelled = false;
     const loadExif = async () => {
       const chunkSize = 100;
-      const accumulatedUpdates: Record<string, Record<string, string>> = {};
 
       for (let i = 0; i < unrequested.length; i += chunkSize) {
         if (isCancelled) break;
@@ -1840,18 +2320,9 @@ export default function MapView(props: MapViewProps) {
           if (isCancelled) break;
 
           setLocalExifMap((prev) => ({ ...prev, ...chunkExif }));
-          Object.assign(accumulatedUpdates, chunkExif);
         } catch (err) {
           console.error('Failed to read EXIF for MapView:', err);
         }
-      }
-
-      if (!isCancelled && Object.keys(accumulatedUpdates).length > 0) {
-        useLibraryStore.getState().setLibrary((state) => ({
-          imageList: state.imageList.map((img) =>
-            accumulatedUpdates[img.path] ? { ...img, exif: accumulatedUpdates[img.path] } : img,
-          ),
-        }));
       }
     };
 
@@ -1983,16 +2454,17 @@ export default function MapView(props: MapViewProps) {
         });
 
         // 3. Update library store imageList
-        const pathsSet = new Set(paths.map((p) => p.split('?vc=')[0]));
+        const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
+        const pathsNormSet = new Set(paths.map(normalizePath));
         useLibraryStore.getState().setLibrary((state) => ({
           imageList: state.imageList.map((img) => {
-            if (pathsSet.has(img.path.split('?vc=')[0])) {
+            if (pathsNormSet.has(normalizePath(img.path))) {
               if (lat !== null && lon !== null) {
                 const hasNative =
                   img.exif?.HasNativeGPS === 'true' ||
                   localExifMap[img.path]?.HasNativeGPS === 'true';
                 const modUpdate = hasNative ? { IsGpsModified: 'true' } : {};
-                return { ...img, exif: { ...(img.exif || {}), ...updates, ...modUpdate } };
+                return { ...img, is_edited: true, exif: { ...(img.exif || {}), ...updates, ...modUpdate } };
               } else if (img.exif) {
                 const cleaned = { ...img.exif };
                 delete cleaned.GPSLatitude;
@@ -2000,7 +2472,10 @@ export default function MapView(props: MapViewProps) {
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
-                return { ...img, exif: cleaned };
+                const hadNative =
+                  img.exif?.HasNativeGPS === 'true' ||
+                  localExifMap[img.path]?.HasNativeGPS === 'true';
+                return { ...img, is_edited: hadNative ? true : img.is_edited, exif: cleaned };
               }
             }
             return img;
@@ -2009,7 +2484,7 @@ export default function MapView(props: MapViewProps) {
 
         // 4. Update editor store if current image matches
         useEditorStore.getState().setEditor((state) => {
-          if (!state.selectedImage || !pathsSet.has(state.selectedImage.path.split('?vc=')[0])) {
+          if (!state.selectedImage || !pathsNormSet.has(normalizePath(state.selectedImage.path))) {
             return state;
           }
           if (lat !== null && lon !== null) {
@@ -2020,6 +2495,7 @@ export default function MapView(props: MapViewProps) {
             return {
               selectedImage: {
                 ...state.selectedImage,
+                is_edited: true,
                 exif: { ...(state.selectedImage.exif || {}), ...updates, ...modUpdate },
               },
             };
@@ -2030,7 +2506,16 @@ export default function MapView(props: MapViewProps) {
             delete cleaned.GPSLongitude;
             delete cleaned.GPSLongitudeRef;
             delete cleaned.IsGpsModified;
-            return { selectedImage: { ...state.selectedImage, exif: cleaned } };
+            const hadNative =
+              state.selectedImage.exif?.HasNativeGPS === 'true' ||
+              localExifMap[state.selectedImage.path]?.HasNativeGPS === 'true';
+            return {
+              selectedImage: {
+                ...state.selectedImage,
+                is_edited: hadNative ? true : state.selectedImage.is_edited,
+                exif: cleaned,
+              },
+            };
           }
           return state;
         });
@@ -2136,9 +2621,12 @@ export default function MapView(props: MapViewProps) {
   // Handle reverting GPS coordinates to original camera EXIF or clearing if none existed originally
   const handleRevertGps = useCallback(
     async (path: string) => {
+      const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
+      const targetNorm = normalizePath(path);
+
       // Record undo state before reverting
-      const img = imageList.find((i) => i.path === path);
-      const currentGps = getImageGps(img, localExifMap[path]);
+      const img = imageList.find((i) => normalizePath(i.path) === targetNorm);
+      const currentGps = getImageGps(img || ({ path, is_raw: false } as ImageFile), localExifMap[path]);
       if (currentGps) {
         undoStackRef.current.push({
           items: [
@@ -2160,8 +2648,7 @@ export default function MapView(props: MapViewProps) {
           Invokes.RevertGpsForPaths,
           { paths: [path] },
         );
-        const coords = result[path];
-        const cleanPath = path.split('?vc=')[0];
+        const coords = result[path] !== undefined ? result[path] : result[targetNorm];
 
         if (coords) {
           // Photo originally had camera GPS: restore it
@@ -2176,25 +2663,28 @@ export default function MapView(props: MapViewProps) {
 
           setLocalExifMap((prev) => {
             const next = { ...prev };
-            const current = next[path] ? { ...next[path] } : {};
+            const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
             delete current.IsGpsModified;
             next[path] = { ...current, ...updates };
+            if (targetNorm !== path) {
+              next[targetNorm] = { ...next[path] };
+            }
             return next;
           });
 
           useLibraryStore.getState().setLibrary((state) => ({
-            imageList: state.imageList.map((img) => {
-              if (img.path.split('?vc=')[0] === cleanPath) {
-                const currentExif = img.exif ? { ...img.exif } : {};
+            imageList: state.imageList.map((i) => {
+              if (normalizePath(i.path) === targetNorm) {
+                const currentExif = i.exif ? { ...i.exif } : {};
                 delete currentExif.IsGpsModified;
-                return { ...img, exif: { ...currentExif, ...updates } };
+                return { ...i, is_edited: false, exif: { ...currentExif, ...updates } };
               }
-              return img;
+              return i;
             }),
           }));
 
           useEditorStore.getState().setEditor((state) => {
-            if (!state.selectedImage || state.selectedImage.path.split('?vc=')[0] !== cleanPath) {
+            if (!state.selectedImage || normalizePath(state.selectedImage.path) !== targetNorm) {
               return state;
             }
             const currentExif = state.selectedImage.exif ? { ...state.selectedImage.exif } : {};
@@ -2202,6 +2692,7 @@ export default function MapView(props: MapViewProps) {
             return {
               selectedImage: {
                 ...state.selectedImage,
+                is_edited: false,
                 exif: { ...currentExif, ...updates },
               },
             };
@@ -2217,47 +2708,48 @@ export default function MapView(props: MapViewProps) {
           // Photo originally had NO GPS coordinates: clear from map back to dock
           setLocalExifMap((prev) => {
             const next = { ...prev };
-            if (next[path]) {
-              const cleaned = { ...next[path] };
-              delete cleaned.GPSLatitude;
-              delete cleaned.GPSLatitudeRef;
-              delete cleaned.GPSLongitude;
-              delete cleaned.GPSLongitudeRef;
-              delete cleaned.IsGpsModified;
-              next[path] = cleaned;
+            const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
+            delete current.GPSLatitude;
+            delete current.GPSLatitudeRef;
+            delete current.GPSLongitude;
+            delete current.GPSLongitudeRef;
+            delete current.IsGpsModified;
+            current.HasNativeGPS = 'false';
+            next[path] = current;
+            if (targetNorm !== path) {
+              next[targetNorm] = { ...current };
             }
             return next;
           });
 
           useLibraryStore.getState().setLibrary((state) => ({
-            imageList: state.imageList.map((img) => {
-              if (img.path.split('?vc=')[0] === cleanPath && img.exif) {
-                const cleaned = { ...img.exif };
+            imageList: state.imageList.map((i) => {
+              if (normalizePath(i.path) === targetNorm) {
+                const cleaned = i.exif ? { ...i.exif } : {};
                 delete cleaned.GPSLatitude;
                 delete cleaned.GPSLatitudeRef;
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
-                return { ...img, exif: cleaned };
+                cleaned.HasNativeGPS = 'false';
+                return { ...i, is_edited: false, exif: cleaned };
               }
-              return img;
+              return i;
             }),
           }));
 
           useEditorStore.getState().setEditor((state) => {
-            if (!state.selectedImage || state.selectedImage.path.split('?vc=')[0] !== cleanPath) {
+            if (!state.selectedImage || normalizePath(state.selectedImage.path) !== targetNorm) {
               return state;
             }
-            if (state.selectedImage.exif) {
-              const cleaned = { ...state.selectedImage.exif };
-              delete cleaned.GPSLatitude;
-              delete cleaned.GPSLatitudeRef;
-              delete cleaned.GPSLongitude;
-              delete cleaned.GPSLongitudeRef;
-              delete cleaned.IsGpsModified;
-              return { selectedImage: { ...state.selectedImage, exif: cleaned } };
-            }
-            return state;
+            const cleaned = state.selectedImage.exif ? { ...state.selectedImage.exif } : {};
+            delete cleaned.GPSLatitude;
+            delete cleaned.GPSLatitudeRef;
+            delete cleaned.GPSLongitude;
+            delete cleaned.GPSLongitudeRef;
+            delete cleaned.IsGpsModified;
+            cleaned.HasNativeGPS = 'false';
+            return { selectedImage: { ...state.selectedImage, is_edited: false, exif: cleaned } };
           });
 
           toast.info(
@@ -2279,16 +2771,14 @@ export default function MapView(props: MapViewProps) {
     [t, imageList, localExifMap],
   );
 
-  // Handle moving / dragging an existing photo pin on the map
+  // Handle moving / dragging existing photo pin(s) on the map
   const handleMovePhoto = useCallback(
-    async (draggedPath: string, lat: number, lon: number) => {
-      let targetPaths = [draggedPath];
-      if (multiSelectedPaths.length > 1 && multiSelectedPaths.includes(draggedPath)) {
-        targetPaths = multiSelectedPaths;
-      }
-      await applyGpsToPhotos(targetPaths, lat, lon);
+    async (draggedPaths: string[] | string, lat: number, lon: number) => {
+      const paths = Array.isArray(draggedPaths) ? draggedPaths : [draggedPaths];
+      if (paths.length === 0) return;
+      await applyGpsToPhotos(paths, lat, lon);
     },
-    [multiSelectedPaths, applyGpsToPhotos],
+    [applyGpsToPhotos],
   );
 
   // Handle Drop on Leaflet Map
@@ -2319,8 +2809,13 @@ export default function MapView(props: MapViewProps) {
         // Smoothly pan map to drop location
         mapRef.current.panTo([lat, lon], { animate: true, duration: 0.4 });
 
-        // Update active selection to the placed photo
+        // Update active selection to the placed photo(s)
         if (pathsToGeotag.length > 0) {
+          useLibraryStore.getState().setLibrary({
+            multiSelectedPaths: pathsToGeotag,
+            libraryActivePath: pathsToGeotag[0],
+            selectionAnchorPath: pathsToGeotag[0],
+          });
           onImageClick?.(pathsToGeotag[0], e as any);
         }
       } catch (err) {
@@ -2330,16 +2825,67 @@ export default function MapView(props: MapViewProps) {
     [applyGpsToPhotos, onImageClick],
   );
 
+  // Reposition photo click-to-place mode
+  const handleStartReposition = useCallback((path: string) => {
+    setSelectedDockPaths(new Set());
+    setRepositioningPhotoPath(path);
+    useLibraryStore.getState().setLibrary({
+      multiSelectedPaths: [path],
+      libraryActivePath: path,
+      selectionAnchorPath: path,
+    });
+  }, []);
+
+  const handleRepositionSelect = useCallback(
+    async (lat: number, lon: number) => {
+      if (!repositioningPhotoPath) return;
+      const targetPath = repositioningPhotoPath;
+      setRepositioningPhotoPath(null);
+      await applyGpsToPhotos([targetPath], lat, lon);
+      toast.success(
+        t('library.map.repositionedSuccess', {
+          defaultValue: 'Photo repositioned successfully',
+        }),
+      );
+    },
+    [repositioningPhotoPath, applyGpsToPhotos, t],
+  );
+
+  // Dedicated selection handler for map photo clicks
+  const handleMapPhotoSelect = useCallback(
+    (path: string, e?: MouseEvent | React.MouseEvent) => {
+      // Clear dock selection so map selection takes absolute precedence
+      setSelectedDockPaths(new Set());
+      setRepositioningPhotoPath(null);
+
+      const photoObj = imageList.find((p) => p.path === path);
+      if (photoObj) {
+        useEditorStore.getState().setEditor({ selectedImage: photoObj });
+      }
+
+      if (e && onImageClick) {
+        onImageClick(path, e as any);
+      } else {
+        useLibraryStore.getState().setLibrary({
+          multiSelectedPaths: [path],
+          libraryActivePath: path,
+          selectionAnchorPath: path,
+        });
+      }
+    },
+    [imageList, onImageClick],
+  );
+
   // Handle right-click on map to position selected photos
   const handleMapRightClick = useCallback(
     (lat: number, lon: number, screenX: number, screenY: number) => {
       const targetPaths =
         selectedDockPaths.size > 0
           ? Array.from(selectedDockPaths)
-          : multiSelectedPaths.length > 0
-            ? multiSelectedPaths
-            : effectiveSelectedPath
-              ? [effectiveSelectedPath]
+          : effectiveSelectedPath
+            ? [effectiveSelectedPath]
+            : multiSelectedPaths.length > 0
+              ? multiSelectedPaths
               : [];
 
       if (targetPaths.length > 0) {
@@ -2352,25 +2898,51 @@ export default function MapView(props: MapViewProps) {
         });
       }
     },
-    [selectedDockPaths, multiSelectedPaths, effectiveSelectedPath],
+    [selectedDockPaths, effectiveSelectedPath, multiSelectedPaths],
   );
 
-  // Cancel drag or context menu on Escape
+  // Cancel drag or context menu or repositioning on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsDraggingOverMap(false);
         setMapContextMenu(null);
+        setRepositioningPhotoPath(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const dockSelectionAnchorRef = useRef<string | null>(null);
+
   // Photo selection in dock - updates dock selection and syncs Information module
   const handlePhotoSelect = useCallback(
     (path: string, e: React.MouseEvent) => {
-      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      const isShift = e.shiftKey;
+
+      if (isShift) {
+        const anchor = dockSelectionAnchorRef.current || path;
+        const anchorIdx = unlocatedPhotos.findIndex((p) => p.path === anchor);
+        const currentIdx = unlocatedPhotos.findIndex((p) => p.path === path);
+
+        if (anchorIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(anchorIdx, currentIdx);
+          const end = Math.max(anchorIdx, currentIdx);
+          const rangePaths = unlocatedPhotos.slice(start, end + 1).map((p) => p.path);
+          const base = isCtrl ? Array.from(selectedDockPaths) : [];
+          const newSelection = Array.from(new Set([...base, ...rangePaths]));
+
+          setSelectedDockPaths(new Set(newSelection));
+          useLibraryStore.getState().setLibrary({
+            multiSelectedPaths: newSelection,
+            libraryActivePath: path,
+            selectionAnchorPath: path,
+          });
+        }
+      } else if (isCtrl) {
+        dockSelectionAnchorRef.current = path;
         setSelectedDockPaths((prev) => {
           const next = new Set(prev);
           if (next.has(path)) {
@@ -2378,14 +2950,31 @@ export default function MapView(props: MapViewProps) {
           } else {
             next.add(path);
           }
+          const nextArr = Array.from(next);
+          useLibraryStore.getState().setLibrary({
+            multiSelectedPaths: nextArr,
+            libraryActivePath: nextArr.includes(path) ? path : (nextArr[nextArr.length - 1] || null),
+            selectionAnchorPath: path,
+          });
           return next;
         });
       } else {
+        dockSelectionAnchorRef.current = path;
         setSelectedDockPaths(new Set([path]));
+        useLibraryStore.getState().setLibrary({
+          multiSelectedPaths: [path],
+          libraryActivePath: path,
+          selectionAnchorPath: path,
+        });
       }
+
       onImageClick?.(path, e);
+      const photo = imageList.find((p) => p.path === path);
+      if (photo) {
+        useEditorStore.getState().setEditor({ selectedImage: photo });
+      }
     },
-    [onImageClick],
+    [onImageClick, imageList, unlocatedPhotos, selectedDockPaths],
   );
 
   // Photo drag start from dock
@@ -2398,7 +2987,13 @@ export default function MapView(props: MapViewProps) {
 
       // Ensure active photo is selected in dock and synchronized with Information panel
       setSelectedDockPaths(new Set(pathsToDrag));
+      useLibraryStore.getState().setLibrary({
+        multiSelectedPaths: pathsToDrag,
+        libraryActivePath: photo.path,
+        selectionAnchorPath: photo.path,
+      });
       onImageClick?.(photo.path, e as any);
+      useEditorStore.getState().setEditor({ selectedImage: photo });
 
       e.dataTransfer.setData('application/json', JSON.stringify({ paths: pathsToDrag }));
       e.dataTransfer.setData('text/plain', JSON.stringify({ paths: pathsToDrag }));
@@ -2422,7 +3017,8 @@ export default function MapView(props: MapViewProps) {
       ghost.style.border = '1.5px solid #0284c7';
       ghost.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
 
-      const thumb = mediumThumbnails[photo.path] || thumbnails[photo.path];
+      const procStore = useProcessStore.getState();
+      const thumb = procStore.mediumThumbnails[photo.path] || procStore.thumbnails[photo.path];
       if (thumb) {
         const img = document.createElement('img');
         img.src = thumb;
@@ -2464,7 +3060,7 @@ export default function MapView(props: MapViewProps) {
         }
       }, 0);
     },
-    [selectedDockPaths, onImageClick, mediumThumbnails, thumbnails, t],
+    [selectedDockPaths, onImageClick, t, imageList],
   );
 
   // Photo drag end handler
@@ -2505,14 +3101,47 @@ export default function MapView(props: MapViewProps) {
   const initialZoom: number = initialSelectedPhoto ? 16 : geotaggedPhotos.length > 0 ? 5 : 2;
 
   // Auto-reveal and highlight unlocated photo in dock if selected from any module
+  const prevEffectiveSelectedPathRef = useRef<string | null>(null);
   useEffect(() => {
     if (!effectiveSelectedPath) return;
+    if (prevEffectiveSelectedPathRef.current === effectiveSelectedPath) return;
+    prevEffectiveSelectedPathRef.current = effectiveSelectedPath;
+
     const isUnlocated = unlocatedPhotos.some((p) => p.path === effectiveSelectedPath);
     if (isUnlocated) {
       setIsDockOpen(true);
       setSelectedDockPaths(new Set([effectiveSelectedPath]));
     }
   }, [effectiveSelectedPath, unlocatedPhotos]);
+
+  const dockRowProps = useMemo(
+    () => ({
+      unlocatedPhotos,
+      selectedDockPaths,
+      effectiveSelectedPath,
+      localExifMap,
+      dockWidth,
+      handlePhotoSelect,
+      onImageDoubleClick,
+      onContextMenu,
+      handlePhotoDragStart,
+      handlePhotoDragEnd,
+      queueThumbnailRequest,
+    }),
+    [
+      unlocatedPhotos,
+      selectedDockPaths,
+      effectiveSelectedPath,
+      localExifMap,
+      dockWidth,
+      handlePhotoSelect,
+      onImageDoubleClick,
+      onContextMenu,
+      handlePhotoDragStart,
+      handlePhotoDragEnd,
+      queueThumbnailRequest,
+    ],
+  );
 
   return (
     <div className="relative flex w-full h-full bg-bg-primary overflow-hidden select-none">
@@ -2555,6 +3184,29 @@ export default function MapView(props: MapViewProps) {
                 {t('library.map.dropToGeotag', { defaultValue: 'Drop onto map to geotag' })}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* Repositioning Banner overlay */}
+        {repositioningPhotoPath && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1200] flex items-center gap-3 bg-surface/95 border-2 border-accent text-text-primary px-5 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+            <MapPin className="w-5 h-5 text-accent animate-bounce" />
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-accent">
+                {t('library.map.repositioningModeTitle', {
+                  defaultValue: 'Click on the map to place photo',
+                })}
+              </span>
+              <span className="text-[11px] text-text-secondary">
+                {repositioningPhotoPath.split(/[\\/]/).pop()} • {t('library.map.pressEscToCancel', { defaultValue: 'Press ESC to cancel' })}
+              </span>
+            </div>
+            <button
+              onClick={() => setRepositioningPhotoPath(null)}
+              className="ml-2 text-xs px-2.5 py-1 bg-border-color/40 hover:bg-border-color/70 rounded text-text-primary transition font-medium"
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </button>
           </div>
         )}
 
@@ -2601,8 +3253,9 @@ export default function MapView(props: MapViewProps) {
           <PhotoClusterLayer
             photos={geotaggedPhotos}
             selectedPath={effectiveSelectedPath}
+            multiSelectedPaths={multiSelectedPaths}
             currentFolderPath={currentFolderPath}
-            onSelectPhoto={onImageClick}
+            onSelectPhoto={handleMapPhotoSelect}
             onDoubleClickPhoto={onImageDoubleClick}
             onContextMenuPhoto={onContextMenu}
             onRevertGps={handleRevertGps}
@@ -2610,6 +3263,9 @@ export default function MapView(props: MapViewProps) {
             onMapContextMenu={handleMapRightClick}
             showThumbnailCards={showThumbnailCards}
             onRequestThumbnails={onRequestThumbnails}
+            repositioningPath={repositioningPhotoPath}
+            onStartReposition={handleStartReposition}
+            onRepositionSelect={handleRepositionSelect}
           />
         </MapContainer>
 
@@ -2704,9 +3360,15 @@ export default function MapView(props: MapViewProps) {
                     onClick={() => {
                       if (selectedDockPaths.size === unlocatedPhotos.length) {
                         setSelectedDockPaths(new Set());
+                        useLibraryStore.getState().setLibrary({ multiSelectedPaths: [], libraryActivePath: null });
                       } else {
                         const allPaths = unlocatedPhotos.map((p) => p.path);
                         setSelectedDockPaths(new Set(allPaths));
+                        useLibraryStore.getState().setLibrary({
+                          multiSelectedPaths: allPaths,
+                          libraryActivePath: allPaths[0] || null,
+                          selectionAnchorPath: allPaths[0] || null,
+                        });
                         if (allPaths.length > 0) {
                           onImageClick?.(allPaths[0], {} as any);
                         }
@@ -2723,7 +3385,7 @@ export default function MapView(props: MapViewProps) {
             </div>
 
             {/* Dock Photo List */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-2 flex flex-col gap-2">
+            <div ref={dockListContainerRef} className="flex-1 w-full min-h-0 overflow-hidden">
               {unlocatedPhotos.length === 0 ? (
                 <div className="m-auto text-center p-6 flex flex-col items-center">
                   <CheckCircle2 className="w-10 h-10 text-emerald-500 mb-2 opacity-80" />
@@ -2733,37 +3395,16 @@ export default function MapView(props: MapViewProps) {
                     })}
                   </p>
                 </div>
-              ) : (
-                unlocatedPhotos.map((photo) => {
-                  const isSelected =
-                    selectedDockPaths.has(photo.path) ||
-                    (selectedDockPaths.size === 0 && effectiveSelectedPath === photo.path);
-                  const thumb = mediumThumbnails[photo.path] || thumbnails[photo.path];
-                  const filename = photo.path.split(/[\\/]/).pop() || '';
-                  const timestamp = getImageTimestamp(photo, localExifMap[photo.path]);
-                  const exif = localExifMap[photo.path] || photo.exif;
-                  const cardHeight = Math.max(120, dockWidth - 16);
-
-                  return (
-                    <UnlocatedPhotoCard
-                      key={photo.path}
-                      photo={photo}
-                      filename={filename}
-                      timestamp={timestamp}
-                      exif={exif}
-                      thumbUrl={thumb}
-                      isSelected={isSelected}
-                      cardHeight={cardHeight}
-                      onSelect={(e) => handlePhotoSelect(photo.path, e)}
-                      onDoubleClick={() => onImageDoubleClick?.(photo.path)}
-                      onContextMenu={(e) => onContextMenu?.(e, photo.path)}
-                      onDragStart={(e) => handlePhotoDragStart(photo, e)}
-                      onDragEnd={handlePhotoDragEnd}
-                      onRequestThumb={queueThumbnailRequest}
-                    />
-                  );
-                })
-              )}
+              ) : dockListHeight > 0 ? (
+                <List
+                  rowCount={unlocatedPhotos.length}
+                  rowHeight={Math.max(120, dockWidth - 16) + 8}
+                  rowComponent={UnlocatedDockRow}
+                  rowProps={dockRowProps}
+                  className="custom-scrollbar"
+                  style={{ height: dockListHeight, width: '100%' }}
+                />
+              ) : null}
             </div>
           </>
         )}

@@ -81,31 +81,25 @@ Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos
 
 ## 📸 Visual Walkthrough
 
-#### 1. Native Library Switcher & Auto-Centered Map View
+#### 1. Native Library Switcher
 <p align="center">
   <img src="docs/screenshots/01-library-map-switcher.png" alt="Library Display Mode Switcher with Map View" width="100%">
 </p>
 <p align="center"><em>Map View integrated into the Library display mode switcher alongside Grid, List, and Culling, with automatic zoom and centering on the selected image.</em></p>
 
-#### 2. Photographic Clusters & Mouse-Wheel Stack Browsing
+#### 2. Switchable Basemaps and ON/OFF Thumbnails 
 <p align="center">
-  <img src="docs/screenshots/02-macro-clusters-overview.png" alt="Geographic Overview with Interactive Photo-Stack Clusters" width="100%">
+  <img src="docs/screenshots/02-macro-clusters-overview.png" alt="You can switch Basemaps and turn on/off Thumbnails " width="100%">
 </p>
 <p align="center"><em>Stacked photo clusters with item count badges, real-time mouse-wheel / card-click cycling (`1/N`), and instant synchronization with the right-hand Info & Metadata sidebar.</em></p>
 
-#### 3. Progressive Zoom, Clean Thumbnail Pins & Basemap Selection
+#### 3. Unlocated Photos Dock & Drag-and-Drop Geotagging
 <p align="center">
-  <img src="docs/screenshots/03-regional-zoom-clusters.png" alt="Regional Zoom, Clean Thumbnail Pins and Basemap Selector" width="100%">
-</p>
-<p align="center"><em>Clean 96×96px thumbnail pins (with compact pin toggle and 3 switchable basemaps: Dark OSM, Standard OSM, and Satellite) synchronized with the workspace filmstrip and sidebars.</em></p>
-
-#### 4. Unlocated Photos Dock & Drag-and-Drop Geotagging
-<p align="center">
-  <img src="docs/screenshots/04-unlocated-dock-geotagging.png" alt="Unlocated Photos Dock and Drag-and-Drop Geotagging" width="100%">
+  <<img width="2313" height="1253" alt="Screenshot from 2026-10-21 11-28-17" src="https://github.com/user-attachments/assets/66d38f48-17a3-42cf-8d9b-9a9b70abb0a3" />
 </p>
 <p align="center"><em>Collapsible, resizable Unlocated dock with Culling-style thumbnail cards and precision single or multi-photo drag-and-drop placement onto the map.</em></p>
 
-#### 5. Direct Pin Repositioning, Native Context Menu & Unified Reset
+#### 4. Direct Pin Repositioning, Native Context Menu & Unified Reset
 <p align="center">
   <img src="docs/screenshots/05-reposition-undo-reset.png" alt="Direct Pin Repositioning, Toolbar Undo and Native Context Menu" width="100%">
 </p>

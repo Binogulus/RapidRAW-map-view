@@ -67,12 +67,12 @@ Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos
   * Drag any existing photo pin or cluster across the map (with a floating thumbnail drag avatar and multi-selection counter badge) to fine-tune or update its GPS coordinates.
   * Alternatively, right-click anywhere on the map canvas to place or reposition all currently selected photos at that exact spot.
 
-### 4. Non-Destructive Persistence, Undo (`Ctrl+Z`) & Unified Reset
+### 4. Non-Destructive Persistence
 * **100% Immutable Source Files**: Original RAW and image binaries are never modified. GPS coordinates are persisted in RapidRAW's `.rrdata` sidecars (and cached in `.rrcache`), and automatically synchronized to standard `.xmp` sidecar files (`exif:GPSLatitude`, `exif:GPSLongitude`) when XMP sync is enabled.
 * **Multi-Step GPS Undo (`Ctrl+Z`)**: A dedicated in-map Undo history stack allows instant rollback of geotagging and repositioning actions via the map toolbar button or `Ctrl+Z` / `Cmd+Z`.
 * **Unified with "Reset Adjustments"**: GPS edits are seamlessly integrated with RapidRAW's native **Reset Adjustments** command (accessible via the application context menu or Editor Controls panel). Resetting an image's adjustments also restores its original camera EXIF GPS coordinates—or returns the photo to the **Unlocated** dock if it originally had no camera GPS.
 
-### 5. Switchable Basemaps & Zero-Cost Thumbnail Performance
+### 5. Switchable Map Styles & Zero-Cost Thumbnail Performance
 * **3 Switchable Map Layers**: Choose between **Dark OSM** (custom darkroom CSS filter tailored for photo editing), **Standard OpenStreetMap**, and **Satellite (Esri World Imagery)**, with user preference persisted in `localStorage`.
 * **Zero-Cost Session Thumbnail Reuse**: Map View reuses thumbnails already cached in memory (`mediumThumbnails` / `thumbnails`) with zero disk or Rust overhead, lazy-loading only 1 representative thumbnail per visible cluster on demand and updating clusters in $O(1)$ via `refreshClusters()`.
 * **Smooth Fractional Zoom & Coordinate Hygiene**: Smooth wheel zoom (`zoomSnap: 0.25`) and automatic rejection of invalid "Null Island" coordinates ($< 0.0001^\circ$).
@@ -87,7 +87,7 @@ Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos
 </p>
 <p align="center"><em>Map View integrated into the Library display mode switcher alongside Grid, List, and Culling, with automatic zoom and centering on the selected image.</em></p>
 
-#### 2. Switchable Basemaps and ON/OFF Thumbnails 
+#### 2. Switchable Style Maps and ON/OFF Thumbnails 
 <p align="center">
   <img src="docs/screenshots/02-macro-clusters-overview.png" alt="You can switch Basemaps and turn on/off Thumbnails " width="100%">
 </p>
@@ -99,11 +99,11 @@ Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos
 </p>
 <p align="center"><em>Collapsible, resizable Unlocated dock with Culling-style thumbnail cards and precision single or multi-photo drag-and-drop placement onto the map.</em></p>
 
-#### 4. Direct Pin Repositioning, Native Context Menu & Unified Reset
+#### 4.Native Context Menu
 <p align="center">
-  <img src="docs/screenshots/05-reposition-undo-reset.png" alt="Direct Pin Repositioning, Toolbar Undo and Native Context Menu" width="100%">
+  <img width="1650" height="1104" alt="Screenshot from 2026-10-21 13-20-21" src="https://github.com/user-attachments/assets/2a8ddb8b-a9cc-4f05-93a4-18fe7e28d1c4" />
 </p>
-<p align="center"><em>Direct on-map pin repositioning, multi-step GPS Undo (`Ctrl+Z`), and full integration with RapidRAW's native context menu and Reset Adjustments.</em></p>
+<p align="center"><em>Full integration with RapidRAW's native context menu and Adjustments.</em></p>
 
 ---
 

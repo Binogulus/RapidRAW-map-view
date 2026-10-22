@@ -3,7 +3,6 @@ import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from '../../../utils/leaflet-setup';
 import 'leaflet.markercluster';
 
-// Safety patch for Leaflet.markercluster DistanceGrid: prevent "TypeError: undefined is not an object (evaluating 'p.x')"
 if ((L as any).DistanceGrid && (L as any).DistanceGrid.prototype) {
   const dgProto = (L as any).DistanceGrid.prototype;
   if (!dgProto.__rapidraw_patched) {
@@ -349,7 +348,6 @@ function createClusterThumbnailPin(
 
   const html = `
     <div data-map-pin="cluster" data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: grab; display: flex; flex-direction: column; align-items: center; ${isSelected ? 'z-index: 100000 !important;' : ''}">
-      <!-- Stack background card 2 (bottom layer) -->
       <div data-stack-card="2" style="
         position: absolute;
         width: 90px;
@@ -363,8 +361,6 @@ function createClusterThumbnailPin(
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
         cursor: pointer;
       "></div>
-
-      <!-- Stack background card 1 (middle layer) -->
       <div data-stack-card="1" style="
         position: absolute;
         width: 93px;
@@ -378,8 +374,6 @@ function createClusterThumbnailPin(
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
         cursor: pointer;
       "></div>
-
-      <!-- Front main card with thumbnail -->
       <div data-front-card="true" style="
         position: relative;
         width: 96px;
@@ -401,8 +395,6 @@ function createClusterThumbnailPin(
           style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; user-select: none;"
           loading="eager"
         />
-
-        <!-- Count Badge in top-right corner with layers icon -->
         <div style="
           position: absolute;
           top: 4px;
@@ -431,8 +423,6 @@ function createClusterThumbnailPin(
           <span data-cluster-badge>${countLabel}</span>
         </div>
       </div>
-
-      <!-- Pointer triangle -->
       <div style="
         width: 0;
         height: 0;
@@ -474,7 +464,6 @@ function createClusterLoadingPin(
 
   const html = `
     <div data-map-pin="cluster" data-cluster-id="${clusterId ?? ''}" style="position: relative; cursor: grab; display: flex; flex-direction: column; align-items: center; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: 50% 100%; transform: ${scale};">
-      <!-- Stack background card 2 -->
       <div data-stack-card="2" style="
         position: absolute;
         width: 90px;
@@ -488,8 +477,6 @@ function createClusterLoadingPin(
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
         cursor: pointer;
       "></div>
-
-      <!-- Stack background card 1 -->
       <div data-stack-card="1" style="
         position: absolute;
         width: 93px;
@@ -503,8 +490,6 @@ function createClusterLoadingPin(
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
         cursor: pointer;
       "></div>
-
-      <!-- Front card placeholder -->
       <div data-front-card="true" style="
         position: relative;
         width: 96px;
@@ -524,8 +509,6 @@ function createClusterLoadingPin(
           <polyline points="2 17 12 22 22 17"/>
           <polyline points="2 12 12 17 22 12"/>
         </svg>
-
-        <!-- Count Badge in top-right corner with layers icon -->
         <div style="
           position: absolute;
           top: 4px;
@@ -554,8 +537,6 @@ function createClusterLoadingPin(
           <span data-cluster-badge>${countLabel}</span>
         </div>
       </div>
-
-      <!-- Pointer triangle -->
       <div style="
         width: 0;
         height: 0;
@@ -670,7 +651,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           prevEl.classList.remove('elevated-map-marker');
         }
       } catch {
-        // Safe fallback
       }
     }
     prevElevatedMarkerRef.current = targetMarker;
@@ -687,7 +667,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           el.classList.add('elevated-map-marker');
         }
       } catch {
-        // Safe fallback
       }
     }
   }, []);
@@ -725,7 +704,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     showThumbnailCardsRef.current = showThumbnailCards;
   }, [showThumbnailCards]);
 
-  // Reset initial fit and zoom flags when switching folders
   useEffect(() => {
     hasInitialFitRef.current = false;
     hasZoomedToInitialRef.current = false;
@@ -756,7 +734,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     onContextMenuPhotoRef.current = onContextMenuPhoto;
   }, [onContextMenuPhoto]);
 
-  // Set crosshair cursor on map container while in click-to-place repositioning mode
   useEffect(() => {
     const container = map.getContainer();
     if (repositioningPath) {
@@ -769,7 +746,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     };
   }, [map, repositioningPath]);
 
-  // Unified pin interaction handler: wheel cycling, background card click-to-front, smooth drag avatar, double-click to adjustments, and context menu
   useEffect(() => {
     const container = map.getContainer();
 
@@ -817,7 +793,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
       if (childPhotos.length <= 1) return;
 
-      // Intercept wheel on cluster so the map does NOT zoom
       e.preventDefault();
       e.stopPropagation();
 
@@ -831,8 +806,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         currentIdx = 0;
       }
 
-      // Rolling forward (deltaY < 0) increments numerator (e.g. 3/12 -> 4/12)
-      // Rolling backward (deltaY > 0) decrements numerator (e.g. 4/12 -> 3/12)
       const direction = e.deltaY < 0 ? 1 : -1;
       const nextIdx = (currentIdx + direction + childPhotos.length) % childPhotos.length;
       (clusterMarker as any)._activePhotoIndex = nextIdx;
@@ -842,7 +815,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         onRequestThumbnailsRef.current([nextPath]);
       }
 
-      // Update cluster thumbnail & badge directly in DOM for instant response
       const imgEl = clusterEl.querySelector('img');
       const thumb = getBestThumbnail(nextPath);
       if (imgEl) {
@@ -870,19 +842,16 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     };
 
     const handlePinMouseDown = (e: MouseEvent) => {
-      // Only primary left button without Alt
       if (e.button !== 0 || e.altKey) return;
 
       const target = e.target as HTMLElement | null;
       const pinEl = target?.closest('[data-map-pin]') as HTMLElement | null;
       if (!pinEl) return;
 
-      const pinType = pinEl.getAttribute('data-map-pin'); // 'photo' | 'cluster'
+      const pinType = pinEl.getAttribute('data-map-pin');
 
-      // Disable Leaflet map panning immediately so mouse interaction belongs entirely to the pin
       map.dragging.disable();
 
-      // Check if user clicked a background stack card in a cluster to bring it to front
       const stackCard = target?.closest('[data-stack-card]') as HTMLElement | null;
       if (pinType === 'cluster' && stackCard) {
         e.preventDefault();
@@ -940,7 +909,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         return;
       }
 
-      // Front card of cluster or standalone photo pin
       const targetPhotoPath = getPinTargetPhotoPath(pinEl);
       if (!targetPhotoPath) {
         map.dragging.enable();
@@ -953,7 +921,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       const pathsToMove =
         isPhotoSelected && currentMulti.length > 1 ? currentMulti : [photoToDrag];
 
-      // Measure card bounds so the dragged avatar maintains exact cursor-to-thumbnail position
       const cardEl = (pinEl.querySelector('[data-front-card="true"]') ||
         pinEl.firstElementChild) as HTMLElement | null;
       const cardRect = cardEl ? cardEl.getBoundingClientRect() : pinEl.getBoundingClientRect();
@@ -1123,7 +1090,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
             onMovePhotoRef.current(pathsToMove, lat, lon);
           }
         } else {
-          // Clean click selection (supports Ctrl, Shift, Meta via onSelectPhoto)
           onSelectPhotoRef.current(photoToDrag, upEv);
         }
       };
@@ -1172,7 +1138,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     };
   }, [map, elevateMarker]);
 
-  // Attach map click and contextmenu handlers
   useEffect(() => {
     const handleContextMenu = (e: L.LeafletMouseEvent) => {
       if (onMapContextMenuRef.current) {
@@ -1202,7 +1167,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     };
   }, [map]);
 
-  // Initialize marker cluster once into reactive state with controlled click behavior and photo icons
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: false,
@@ -1309,7 +1273,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     };
   }, [map, elevateMarker]);
 
-  // Lazy request visible thumbnails for standalone pins and cluster representatives in viewport
   const requestVisibleThumbnails = useCallback(() => {
     if (!showThumbnailCards || !onRequestThumbnails || !map || !cluster) return;
 
@@ -1325,23 +1288,19 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         const marker = markersMapRef.current.get(photo.path);
         if (!marker) continue;
 
-        // Check if marker coordinate is within the current viewport
         if (!bounds.contains([photo.lat, photo.lon])) continue;
 
         const visibleParent = cluster.getVisibleParent(marker);
         if (!visibleParent) continue;
 
         if (visibleParent === marker) {
-          // Standalone visible pin
           if (!hasThumb(photo.path) && !missing.includes(photo.path)) {
             missing.push(photo.path);
           }
         } else {
-          // Inside a visible cluster
           if (seenClusters.has(visibleParent)) continue;
           seenClusters.add(visibleParent);
 
-          // Check if ANY photo in this cluster already has a cached thumbnail
           const childMarkers = (visibleParent as L.MarkerCluster).getAllChildMarkers();
           const hasAnyCachedThumb = childMarkers.some((m) => {
             const p = (m as any).photoPath;
@@ -1349,7 +1308,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
           });
 
           if (!hasAnyCachedThumb && childMarkers.length > 0) {
-            // Request ONLY ONE photo for the whole cluster!
             const repPath = (childMarkers[0] as any)?.photoPath;
             if (repPath && !hasThumb(repPath) && !missing.includes(repPath)) {
               missing.push(repPath);
@@ -1362,18 +1320,15 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         onRequestThumbnails(missing);
       }
     } catch {
-      // Map may not be ready or bounds invalid
     }
   }, [showThumbnailCards, onRequestThumbnails, map, cluster]);
 
-  // Manage markers in cluster reactivity (never out-of-sync)
   useEffect(() => {
     if (!cluster) return;
 
     const currentPaths = new Set(photos.map((p) => p.path));
     const existingMarkers = markersMapRef.current;
 
-    // 1. Remove markers for photos that no longer exist
     const markersToRemove: L.Marker[] = [];
     existingMarkers.forEach((marker, path) => {
       if (!currentPaths.has(path)) {
@@ -1385,7 +1340,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       cluster.removeLayers(markersToRemove);
     }
 
-    // 2. Add or update markers in batch
     const markersToAdd: L.Marker[] = [];
     const markersToReposition: L.Marker[] = [];
 
@@ -1439,7 +1393,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       cluster.addLayers(markersToAdd);
     }
 
-    // 3. Initial view positioning (zoom directly to selected photo if present, otherwise fit bounds)
     const selectedPhoto = selectedPath ? photos.find((p) => p.path === selectedPath) : null;
 
     if (!hasInitialFitRef.current && photos.length > 0) {
@@ -1474,7 +1427,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     elevateMarker,
   ]);
 
-  // Debounced listener to request thumbnails only for visible standalone pins
   useEffect(() => {
     if (!showThumbnailCards || !cluster) return;
 
@@ -1492,7 +1444,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     };
   }, [map, cluster, showThumbnailCards, requestVisibleThumbnails]);
 
-  // Update individual markers and clusters that receive a new thumbnail (O(1) per arriving thumb)
   useEffect(() => {
     const newlyAdded: string[] = [];
     const checkDict = (dict: Record<string, string>) => {
@@ -1534,7 +1485,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
             try {
               cluster.refreshClusters(toRefresh);
             } catch {
-              // Safe fallback
             }
           }
         });
@@ -1549,7 +1499,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     cluster,
   ]);
 
-  // Toggle between Compact Pins and Thumbnail Cards without rebuilding cluster
   useEffect(() => {
     markersMapRef.current.forEach((marker, path) => {
       const photo = photosRef.current.find((p) => p.path === path);
@@ -1573,7 +1522,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
     }
   }, [showThumbnailCards, cluster]);
 
-  // Highlight, elevate, and smooth flyTo selected photo(s)
   useEffect(() => {
     const currentSet = new Set(multiSelectedPaths || []);
     const prevSet = prevSelectedPathsRef.current;
@@ -1594,7 +1542,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
     prevSelectedPathsRef.current = currentSet;
 
-    // Update icons for deselected markers
     for (const p of deselected) {
       const marker = markersMapRef.current.get(p);
       const photo = photos.find((ph) => ph.path === p);
@@ -1610,7 +1557,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       }
     }
 
-    // Update icons for newly selected markers
     for (const p of newlySelected) {
       const marker = markersMapRef.current.get(p);
       const photo = photos.find((ph) => ph.path === p);
@@ -1626,12 +1572,10 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       }
     }
 
-    // If any selection changes happened and we have clusters, refresh them
     if (cluster && (deselected.length > 0 || newlySelected.length > 0)) {
       try {
         cluster.refreshClusters();
       } catch {
-        // Safe fallback
       }
     }
 
@@ -1640,7 +1584,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       return;
     }
 
-    // If selection was triggered by mouse wheel cycling inside a cluster, do not fly or spiderfy
     if (isWheelSelectingRef.current) return;
 
     const marker = markersMapRef.current.get(selectedPath);
@@ -1660,7 +1603,6 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       );
       elevateMarker(targetToElevate);
 
-      // Once map is already loaded and interactive, selecting/clicking photos must NOT zoom or move the map!
       if (visibleParent && visibleParent !== marker) {
         const clusterObj = visibleParent as L.MarkerCluster;
         const childMarkers = clusterObj.getAllChildMarkers();
@@ -1769,7 +1711,6 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
           isSelected && 'ring-2 ring-accent z-10 shadow-md',
         )}
       >
-        {/* Full Image Container with object-contain so the entire photo is shown without cropping */}
         <div className="relative w-full flex-1 min-h-0 z-0 bg-surface">
           {thumbUrl ? (
             <img
@@ -1785,10 +1726,8 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
           )}
         </div>
 
-        {/* Gradient shadow behind title */}
         <div className="absolute bottom-0 left-0 right-0 h-16 transition-opacity duration-300 pointer-events-none z-10 bg-linear-to-t from-black/75 to-transparent group-hover:opacity-0" />
 
-        {/* Bottom bar with title and shooting data on hover */}
         <div className="absolute bottom-0 left-0 right-0 flex flex-col p-2 pb-1.5 transition-all duration-300 ease-in-out z-20 bg-transparent group-hover:bg-surface/85 backdrop-blur-none group-hover:backdrop-blur-md border-t border-transparent group-hover:border-border-color/50">
           <div className="flex items-end justify-between shrink-0">
             <span
@@ -1844,7 +1783,6 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
           </div>
         </div>
 
-        {/* Selection / Hover ring */}
         <div
           className={clsx(
             'absolute inset-0 rounded-md pointer-events-none z-30 transition-all duration-150 ring-2 ring-inset',
@@ -1934,7 +1872,6 @@ const MapControls: React.FC<MapControlsProps> = ({
 
   return (
     <div className="absolute top-4 right-4 z-[1000] flex flex-col items-end gap-2">
-      {/* Toggle Unlocated Photos Dock */}
       <button
         onClick={onToggleDock}
         className={`w-9 h-9 rounded-lg border flex items-center justify-center shadow-lg backdrop-blur-sm transition active:scale-95 relative ${
@@ -1954,7 +1891,6 @@ const MapControls: React.FC<MapControlsProps> = ({
         )}
       </button>
 
-      {/* Undo Button */}
       <button
         onClick={onUndo}
         disabled={!canUndo}
@@ -1980,7 +1916,6 @@ const MapControls: React.FC<MapControlsProps> = ({
         <Maximize2 className="w-4 h-4" />
       </button>
 
-      {/* Toggle Thumbnails Card vs Compact Pin */}
       <button
         onClick={onToggleThumbnailCards}
         className={`w-9 h-9 rounded-lg border flex items-center justify-center shadow-lg backdrop-blur-sm transition active:scale-95 ${
@@ -1999,7 +1934,6 @@ const MapControls: React.FC<MapControlsProps> = ({
         <ImageIcon className="w-4 h-4" />
       </button>
 
-      {/* Basemap Selection */}
       <div className="relative">
         <button
           onClick={() => setShowMenu((prev) => !prev)}
@@ -2159,7 +2093,6 @@ export default function MapView(props: MapViewProps) {
     });
   }, []);
 
-  // Invalidate Leaflet size whenever dock width or open state changes
   useEffect(() => {
     const timer = setTimeout(() => {
       mapRef.current?.invalidateSize();
@@ -2167,7 +2100,6 @@ export default function MapView(props: MapViewProps) {
     return () => clearTimeout(timer);
   }, [isDockOpen, dockWidth]);
 
-  // Dock Resizing Handlers
   const resize = useCallback((mouseMoveEvent: MouseEvent) => {
     if (!isResizing.current) return;
     const newWidth = window.innerWidth - mouseMoveEvent.clientX;
@@ -2215,7 +2147,6 @@ export default function MapView(props: MapViewProps) {
     };
   }, [resize, stopResizing]);
 
-  // Close context menu on outside click
   useEffect(() => {
     const handleWindowClick = () => setMapContextMenu(null);
     window.addEventListener('click', handleWindowClick);
@@ -2246,7 +2177,6 @@ export default function MapView(props: MapViewProps) {
     );
   }, [activePath, libraryActivePath, editorSelectedPath, multiSelectedPaths]);
 
-  // Thumbnail batch queue
   const requestQueueRef = useRef<Set<string>>(new Set());
   const requestTimeoutRef = useRef<any>(null);
 
@@ -2269,7 +2199,6 @@ export default function MapView(props: MapViewProps) {
     [onRequestThumbnails],
   );
 
-  // Reset EXIF request tracking and undo stack when switching folders
   useEffect(() => {
     requestedExifRef.current.clear();
     setLocalExifMap({});
@@ -2280,7 +2209,6 @@ export default function MapView(props: MapViewProps) {
     setCanUndo(false);
   }, [currentFolderPath]);
 
-  // Sync localExifMap when imageList in store is updated (e.g. Reset Adjustments or Revert GPS)
   useEffect(() => {
     if (!imageList || imageList.length === 0) return;
     setLocalExifMap((prev) => {
@@ -2296,7 +2224,6 @@ export default function MapView(props: MapViewProps) {
     });
   }, [imageList]);
 
-  // Non-blocking, smooth EXIF ingestion without continuous UI re-sorting loops
   useEffect(() => {
     const unrequested = imageList.filter(
       (img) => !img.exif && !localExifMap[img.path] && !requestedExifRef.current.has(img.path),
@@ -2332,7 +2259,6 @@ export default function MapView(props: MapViewProps) {
     };
   }, [imageList.length, currentFolderPath]);
 
-  // Compute Geotagged and Unlocated photos
   const { geotaggedPhotos, unlocatedPhotos, totalPhotos, geotaggedCount } = useMemo(() => {
     const items: MapPhotoItem[] = [];
     const unlocated: ImageFile[] = [];
@@ -2374,7 +2300,6 @@ export default function MapView(props: MapViewProps) {
     };
   }, [imageList, localExifMap]);
 
-  // Apply or remove GPS coordinates to sidecars and state, with optional Undo tracking
   const applyGpsToPhotosInternal = useCallback(
     async (
       paths: string[],
@@ -2385,7 +2310,6 @@ export default function MapView(props: MapViewProps) {
     ) => {
       if (paths.length === 0) return;
 
-      // If recordUndo is true, capture previous state before changing
       if (recordUndo) {
         const undoItems: GpsUndoItem[] = [];
         for (const p of paths) {
@@ -2420,7 +2344,6 @@ export default function MapView(props: MapViewProps) {
           updates.GPSLongitudeRef = lon >= 0 ? 'E' : 'W';
         }
 
-        // 1. Immediately update local map view state so pins appear or vanish smoothly
         setLocalExifMap((prev) => {
           const next = { ...prev };
           for (const p of paths) {
@@ -2446,14 +2369,12 @@ export default function MapView(props: MapViewProps) {
           return next;
         });
 
-        // 2. Remove geotagged photos from dock selection
         setSelectedDockPaths((prev) => {
           const next = new Set(prev);
           paths.forEach((p) => next.delete(p));
           return next;
         });
 
-        // 3. Update library store imageList
         const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
         const pathsNormSet = new Set(paths.map(normalizePath));
         useLibraryStore.getState().setLibrary((state) => ({
@@ -2482,7 +2403,6 @@ export default function MapView(props: MapViewProps) {
           }),
         }));
 
-        // 4. Update editor store if current image matches
         useEditorStore.getState().setEditor((state) => {
           if (!state.selectedImage || !pathsNormSet.has(normalizePath(state.selectedImage.path))) {
             return state;
@@ -2580,13 +2500,11 @@ export default function MapView(props: MapViewProps) {
     [applyGpsToPhotosInternal],
   );
 
-  // Undo last GPS change
   const handleUndoGps = useCallback(async () => {
     const action = undoStackRef.current.pop();
     setCanUndo(undoStackRef.current.length > 0);
     if (!action || action.items.length === 0) return;
 
-    // Group items by target previous coordinate to run in minimal batch operations
     const groups = new Map<string, { lat: number | null; lon: number | null; paths: string[] }>();
     for (const item of action.items) {
       const key = `${item.previousLat}_${item.previousLon}`;
@@ -2603,7 +2521,6 @@ export default function MapView(props: MapViewProps) {
     toast.info(t('library.map.undoSuccess', { defaultValue: 'GPS change undone' }));
   }, [applyGpsToPhotosInternal, t]);
 
-  // Global Ctrl+Z / Cmd+Z shortcut listener for undoing geotagging actions
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
@@ -2618,13 +2535,11 @@ export default function MapView(props: MapViewProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndoGps]);
 
-  // Handle reverting GPS coordinates to original camera EXIF or clearing if none existed originally
   const handleRevertGps = useCallback(
     async (path: string) => {
       const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
       const targetNorm = normalizePath(path);
 
-      // Record undo state before reverting
       const img = imageList.find((i) => normalizePath(i.path) === targetNorm);
       const currentGps = getImageGps(img || ({ path, is_raw: false } as ImageFile), localExifMap[path]);
       if (currentGps) {
@@ -2651,7 +2566,6 @@ export default function MapView(props: MapViewProps) {
         const coords = result[path] !== undefined ? result[path] : result[targetNorm];
 
         if (coords) {
-          // Photo originally had camera GPS: restore it
           const [lat, lon] = coords;
           const updates: Record<string, string> = {
             GPSLatitude: toDmsString(lat),
@@ -2705,7 +2619,6 @@ export default function MapView(props: MapViewProps) {
             }),
           );
         } else {
-          // Photo originally had NO GPS coordinates: clear from map back to dock
           setLocalExifMap((prev) => {
             const next = { ...prev };
             const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
@@ -2771,7 +2684,6 @@ export default function MapView(props: MapViewProps) {
     [t, imageList, localExifMap],
   );
 
-  // Handle moving / dragging existing photo pin(s) on the map
   const handleMovePhoto = useCallback(
     async (draggedPaths: string[] | string, lat: number, lon: number) => {
       const paths = Array.isArray(draggedPaths) ? draggedPaths : [draggedPaths];
@@ -2781,7 +2693,6 @@ export default function MapView(props: MapViewProps) {
     [applyGpsToPhotos],
   );
 
-  // Handle Drop on Leaflet Map
   const handleMapDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
@@ -2806,10 +2717,8 @@ export default function MapView(props: MapViewProps) {
 
         await applyGpsToPhotos(pathsToGeotag, lat, lon);
 
-        // Smoothly pan map to drop location
         mapRef.current.panTo([lat, lon], { animate: true, duration: 0.4 });
 
-        // Update active selection to the placed photo(s)
         if (pathsToGeotag.length > 0) {
           useLibraryStore.getState().setLibrary({
             multiSelectedPaths: pathsToGeotag,
@@ -2825,7 +2734,6 @@ export default function MapView(props: MapViewProps) {
     [applyGpsToPhotos, onImageClick],
   );
 
-  // Reposition photo click-to-place mode
   const handleStartReposition = useCallback((path: string) => {
     setSelectedDockPaths(new Set());
     setRepositioningPhotoPath(path);
@@ -2851,10 +2759,8 @@ export default function MapView(props: MapViewProps) {
     [repositioningPhotoPath, applyGpsToPhotos, t],
   );
 
-  // Dedicated selection handler for map photo clicks
   const handleMapPhotoSelect = useCallback(
     (path: string, e?: MouseEvent | React.MouseEvent) => {
-      // Clear dock selection so map selection takes absolute precedence
       setSelectedDockPaths(new Set());
       setRepositioningPhotoPath(null);
 
@@ -2876,7 +2782,6 @@ export default function MapView(props: MapViewProps) {
     [imageList, onImageClick],
   );
 
-  // Handle right-click on map to position selected photos
   const handleMapRightClick = useCallback(
     (lat: number, lon: number, screenX: number, screenY: number) => {
       const targetPaths =
@@ -2901,7 +2806,6 @@ export default function MapView(props: MapViewProps) {
     [selectedDockPaths, effectiveSelectedPath, multiSelectedPaths],
   );
 
-  // Cancel drag or context menu or repositioning on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -2916,7 +2820,6 @@ export default function MapView(props: MapViewProps) {
 
   const dockSelectionAnchorRef = useRef<string | null>(null);
 
-  // Photo selection in dock - updates dock selection and syncs Information module
   const handlePhotoSelect = useCallback(
     (path: string, e: React.MouseEvent) => {
       const isCtrl = e.ctrlKey || e.metaKey;
@@ -2977,7 +2880,6 @@ export default function MapView(props: MapViewProps) {
     [onImageClick, imageList, unlocatedPhotos, selectedDockPaths],
   );
 
-  // Photo drag start from dock
   const handlePhotoDragStart = useCallback(
     (photo: ImageFile, e: React.DragEvent) => {
       const pathsToDrag =
@@ -2985,7 +2887,6 @@ export default function MapView(props: MapViewProps) {
           ? Array.from(selectedDockPaths)
           : [photo.path];
 
-      // Ensure active photo is selected in dock and synchronized with Information panel
       setSelectedDockPaths(new Set(pathsToDrag));
       useLibraryStore.getState().setLibrary({
         multiSelectedPaths: pathsToDrag,
@@ -2999,7 +2900,6 @@ export default function MapView(props: MapViewProps) {
       e.dataTransfer.setData('text/plain', JSON.stringify({ paths: pathsToDrag }));
       e.dataTransfer.effectAllowed = 'copyMove';
 
-      // Create a crisp, high-definition preview badge with actual photo thumbnail
       const ghost = document.createElement('div');
       ghost.style.position = 'fixed';
       ghost.style.left = '0';
@@ -3050,7 +2950,6 @@ export default function MapView(props: MapViewProps) {
       ghost.appendChild(textDiv);
       document.body.appendChild(ghost);
 
-      // Force layout calculation so browser paints at high resolution
       ghost.getBoundingClientRect();
 
       e.dataTransfer.setDragImage(ghost, 28, 28);
@@ -3063,7 +2962,6 @@ export default function MapView(props: MapViewProps) {
     [selectedDockPaths, onImageClick, t, imageList],
   );
 
-  // Photo drag end handler
   const handlePhotoDragEnd = useCallback(() => {
     setIsDraggingOverMap(false);
   }, []);
@@ -3100,7 +2998,6 @@ export default function MapView(props: MapViewProps) {
 
   const initialZoom: number = initialSelectedPhoto ? 16 : geotaggedPhotos.length > 0 ? 5 : 2;
 
-  // Auto-reveal and highlight unlocated photo in dock if selected from any module
   const prevEffectiveSelectedPathRef = useRef<string | null>(null);
   useEffect(() => {
     if (!effectiveSelectedPath) return;
@@ -3145,9 +3042,7 @@ export default function MapView(props: MapViewProps) {
 
   return (
     <div className="relative flex w-full h-full bg-bg-primary overflow-hidden select-none">
-      {/* Transparent overlay during dock drag to prevent event stealing and maintain cursor */}
       {isResizingState && <div className="fixed inset-0 z-[9999] cursor-col-resize select-none" />}
-      {/* Left Area: Map Canvas & Controls */}
       <div
         className="flex-1 h-full relative"
         onDragOver={(e) => {
@@ -3163,7 +3058,6 @@ export default function MapView(props: MapViewProps) {
         }}
         onDrop={handleMapDrop}
       >
-        {/* Geotagged Info Badge on Map */}
         <div className="absolute top-4 left-4 z-[1000] flex items-center gap-2 bg-surface/90 border border-border-color/30 backdrop-blur-md px-3 py-1.5 rounded-lg shadow-lg">
           <MapPin className="w-4 h-4 text-accent shrink-0" />
           <span className="text-xs font-medium text-text-primary">
@@ -3175,7 +3069,6 @@ export default function MapView(props: MapViewProps) {
           </span>
         </div>
 
-        {/* Drag over map overlay indicator - Crisp map without blur, unobtrusive top banner */}
         {isDraggingOverMap && (
           <div className="absolute inset-0 z-[1100] pointer-events-none border-2 border-accent border-dashed">
             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface/95 border border-accent text-text-primary px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 animate-in fade-in zoom-in-95 duration-150">
@@ -3187,7 +3080,6 @@ export default function MapView(props: MapViewProps) {
           </div>
         )}
 
-        {/* Repositioning Banner overlay */}
         {repositioningPhotoPath && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1200] flex items-center gap-3 bg-surface/95 border-2 border-accent text-text-primary px-5 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
             <MapPin className="w-5 h-5 text-accent animate-bounce" />
@@ -3210,7 +3102,6 @@ export default function MapView(props: MapViewProps) {
           </div>
         )}
 
-        {/* No GPS Warning overlay if folder has photos but none have GPS and dock is closed */}
         {geotaggedCount === 0 && totalPhotos > 0 && !isDockOpen && (
           <div className="absolute inset-0 z-[999] pointer-events-none flex items-center justify-center">
             <div className="bg-surface/95 border border-border-color/40 backdrop-blur-md p-6 rounded-xl shadow-2xl text-center max-w-sm pointer-events-auto">
@@ -3234,7 +3125,6 @@ export default function MapView(props: MapViewProps) {
           </div>
         )}
 
-        {/* Leaflet Map */}
         <MapContainer
           center={initialCenter}
           zoom={initialZoom}
@@ -3269,7 +3159,6 @@ export default function MapView(props: MapViewProps) {
           />
         </MapContainer>
 
-        {/* Map Controls */}
         <MapControls
           onFitBounds={handleFitBounds}
           tileStyle={tileStyle}
@@ -3284,7 +3173,6 @@ export default function MapView(props: MapViewProps) {
         />
       </div>
 
-      {/* Right Dock for Unlocated Photos */}
       <div
         style={{ width: isDockOpen ? dockWidth : 0 }}
         onDragOver={(e) => {
@@ -3321,14 +3209,12 @@ export default function MapView(props: MapViewProps) {
       >
         {isDockOpen && (
           <>
-            {/* Left border resizer handle */}
             <div
               onMouseDown={startResizing}
               className="absolute top-0 bottom-0 -left-1 w-2.5 cursor-col-resize hover:bg-accent/50 active:bg-accent transition-colors z-40"
               title={t('library.map.resizeDock', { defaultValue: 'Drag to resize' })}
             />
 
-            {/* Dock Header */}
             <div className="p-3 border-b border-surface/50 flex flex-col gap-1 shrink-0 bg-surface/30">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -3384,7 +3270,6 @@ export default function MapView(props: MapViewProps) {
               </div>
             </div>
 
-            {/* Dock Photo List */}
             <div ref={dockListContainerRef} className="flex-1 w-full min-h-0 overflow-hidden">
               {unlocatedPhotos.length === 0 ? (
                 <div className="m-auto text-center p-6 flex flex-col items-center">
@@ -3410,7 +3295,6 @@ export default function MapView(props: MapViewProps) {
         )}
       </div>
 
-      {/* Floating Map Context Menu */}
       {mapContextMenu && (
         <div
           style={{ top: mapContextMenu.y, left: mapContextMenu.x }}

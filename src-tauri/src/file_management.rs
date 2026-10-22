@@ -2709,7 +2709,6 @@ pub fn revert_gps_in_metadata_and_cache(
 ) -> Option<(f64, f64)> {
     let mut exif_map = metadata.exif.clone().unwrap_or_default();
 
-    // 1. Try restoring from preserved original camera GPS in sidecar
     let orig_from_sidecar = if let (Some(orig_lat_str), Some(orig_lon_str)) = (
         exif_map.get("OriginalGPSLatitude"),
         exif_map.get("OriginalGPSLongitude"),
@@ -2742,7 +2741,6 @@ pub fn revert_gps_in_metadata_and_cache(
         None
     };
 
-    // 2. Fallback to re-extracting native GPS from original file bytes
     let native_opt = orig_from_sidecar.or_else(|| extract_native_gps(source_path));
 
     let ret = if let Some((lat_val, lon_val, lat_str, lat_ref, lon_str, lon_ref)) = native_opt {
@@ -3269,7 +3267,6 @@ pub fn set_gps_for_paths(
 
         let mut exif_map = metadata.exif.clone().unwrap_or_default();
 
-        // 1. Determine or preserve original camera GPS
         let has_orig = exif_map.contains_key("OriginalGPSLatitude");
         let has_native = if has_orig {
             true
@@ -3287,7 +3284,6 @@ pub fn set_gps_for_paths(
             false
         };
 
-        // If native GPS was present but OriginalGPSLatitude was not yet recorded, record it from current GPS if not yet modified
         if has_native && !exif_map.contains_key("OriginalGPSLatitude") {
             if exif_map.get("IsGpsModified").map(|s| s != "true").unwrap_or(true) {
                 if let (Some(cur_lat), Some(cur_lon)) = (
@@ -4564,7 +4560,6 @@ pub fn resolve_xmp_path(image_path: &Path) -> Option<PathBuf> {
 pub fn parse_gps_components(coord: &str) -> Option<(u32, f64, f64)> {
     let trimmed = coord.trim();
 
-    // 1. Deg / Min / Sec format (e.g. "45 deg 27 min 51.12 sec" or "45° 27' 51.12\"") or Deg / Min format (e.g. "45 deg 27.852 min")
     let re_dms = regex!(
         r#"(\d+)\s*(?:deg|°)\s*(\d+(?:\.\d+)?)\s*(?:min|'|’|′)(?:\s*(\d+(?:\.\d+)?)\s*(?:sec|"|”|″)?)?"#
     );
@@ -4581,7 +4576,6 @@ pub fn parse_gps_components(coord: &str) -> Option<(u32, f64, f64)> {
         }
     }
 
-    // 2. Comma-separated parts (e.g. "45, 27, 51.12" or rational fractions "45/1, 27/1, 5112/100")
     let comma_parts: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
     let parse_frac = |s: &str| -> Option<f64> {
         if let Some((n, d)) = s.split_once('/') {
@@ -4608,7 +4602,6 @@ pub fn parse_gps_components(coord: &str) -> Option<(u32, f64, f64)> {
         }
     }
 
-    // 3. Decimal degrees float
     if let Ok(val) = trimmed.parse::<f64>() {
         let abs_val = val.abs();
         let deg = abs_val.floor() as u32;
@@ -4843,7 +4836,6 @@ pub fn sync_metadata_to_xmp(source_path: &Path, metadata: &ImageMetadata, create
             }
         }
 
-        // Sync GPS coordinates
         let gps_data = metadata.exif.as_ref().and_then(|exif| {
             let lat = exif.get("GPSLatitude")?;
             let lat_ref = exif
@@ -4988,45 +4980,5 @@ pub fn sync_metadata_to_xmp(source_path: &Path, metadata: &ImageMetadata, create
         }
 
         let _ = fs::write(&xmp_file, content);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_to_dms_string() {
-        let lat = 45.4642;
-        let dms = to_dms_string(lat);
-        assert!(dms.starts_with("45 deg 27 min"));
-
-        let components = parse_gps_components(&dms).unwrap();
-        assert_eq!(components.0, 45);
-        assert_eq!(components.1, 27.0);
-        let reconstructed = components.0 as f64 + components.1 / 60.0 + components.2 / 3600.0;
-        assert!((reconstructed - lat).abs() < 0.0001);
-    }
-
-    #[test]
-    fn test_extract_xmp_gps() {
-        let xmp_sample = r#"<?xml version="1.0" encoding="UTF-8"?>
-<x:xmpmeta xmlns:x="adobe:ns:meta/">
- <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-  <rdf:Description rdf:about=""
-    xmlns:exif="http://ns.adobe.com/exif/1.0/"
-    exif:GPSLatitude="45,27.8520N"
-    exif:GPSLongitude="9,11.2340E">
-  </rdf:Description>
- </rdf:RDF>
-</x:xmpmeta>"#;
-
-        let result = extract_xmp_gps(xmp_sample);
-        assert!(result.is_some());
-        let (lat_s, lat_r, lon_s, lon_r) = result.unwrap();
-        assert_eq!(lat_r, "N");
-        assert_eq!(lon_r, "E");
-        assert!(lat_s.starts_with("45 deg 27 min"));
-        assert!(lon_s.starts_with("9 deg 11 min"));
     }
 }

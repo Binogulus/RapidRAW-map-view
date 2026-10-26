@@ -2936,7 +2936,7 @@ pub fn revert_gps_in_metadata_and_cache(
 
     let native_opt = orig_from_sidecar.or_else(|| extract_native_gps(source_path));
 
-    let ret = if let Some((lat_val, lon_val, lat_str, lat_ref, lon_str, lon_ref)) = native_opt {
+    if let Some((lat_val, lon_val, lat_str, lat_ref, lon_str, lon_ref)) = native_opt {
         exif_map.insert("GPSLatitude".to_string(), lat_str.clone());
         exif_map.insert("GPSLatitudeRef".to_string(), lat_ref.clone());
         exif_map.insert("GPSLongitude".to_string(), lon_str.clone());
@@ -2965,9 +2965,7 @@ pub fn revert_gps_in_metadata_and_cache(
         crate::exif_processing::save_exif_to_rrcache(source_path, exif_map.clone());
         metadata.exif = Some(exif_map);
         None
-    };
-
-    ret
+    }
 }
 
 #[tauri::command]
@@ -4891,12 +4889,12 @@ pub fn parse_gps_components(coord: &str) -> Option<(u32, f64, f64)> {
         ) {
             return Some((d as u32, m, s));
         }
-    } else if comma_parts.len() == 2 {
-        if let (Some(d), Some(m)) = (parse_frac(comma_parts[0]), parse_frac(comma_parts[1])) {
-            let min = m.floor();
-            let sec = (m - min) * 60.0;
-            return Some((d as u32, min, sec));
-        }
+    } else if comma_parts.len() == 2
+        && let (Some(d), Some(m)) = (parse_frac(comma_parts[0]), parse_frac(comma_parts[1]))
+    {
+        let min = m.floor();
+        let sec = (m - min) * 60.0;
+        return Some((d as u32, min, sec));
     }
 
     if let Ok(val) = trimmed.parse::<f64>() {

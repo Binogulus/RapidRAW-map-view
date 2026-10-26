@@ -17,9 +17,131 @@
 
 </div>
 
-# RapidRAW
+# RapidRAW — Map View & Interactive Geotagging
 
-> A beautiful, non-destructive, and GPU-accelerated RAW image editor built with performance in mind.
+> Native geospatial catalog exploration, interactive photo-stack clustering, and non-destructive drag-and-drop geotagging for RapidRAW.
+
+This repository serves as a public staging and development branch maintained by **[Binogulus](https://github.com/Binogulus)** to propose the native **Map View** feature upstream to **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / @CyberTimon](https://github.com/CyberTimon)).
+
+---
+
+## 🗺️ Map View: Overview
+
+**Map View** is integrated directly into RapidRAW's Library workspace as the **4th display mode** alongside **Grid**, **List**, and **Culling**. It provides photographers with a fast, distraction-free geospatial workflow to explore geotagged catalogs, browse stacked photo clusters directly on the canvas, assign or adjust GPS coordinates via drag-and-drop, and jump straight into editing—while keeping original RAW files 100% untouched.
+
+<div align="center">
+
+| 📍 **4th Library Display Mode** | 📸 **Interactive Photo Clusters** | 🧭 **Drag & Drop Geotagging** |
+| :---: | :---: | :---: |
+| Native view switcher integration with smart auto-centering on active selection | Physical stacked photo cards with mouse-wheel & click-to-cycle browsing | Resizable Culling-style **Unlocated** dock for single & batch GPS placement |
+
+| 🔗 **Unified Workspace & Editing** | 💾 **Non-Destructive Sidecars** | 🛰️ **3 Switchable Basemaps** |
+| :---: | :---: | :---: |
+| Instant Info sidebar sync, double-click to **Adjustments** & native context menu | `.rrdata` & `.xmp` persistence, `Ctrl+Z` undo & unified **Reset Adjustments** | **Dark OSM** (darkroom theme), **Standard OSM** & **Esri World Imagery** |
+
+</div>
+
+---
+
+## ✨ Architecture & Feature Breakdown
+
+### 1. Native Library & Workspace Integration
+* **Seamless Display Mode Switching**: Switch between **Grid**, **List**, **Culling**, and **Map View** from the Library header with a single click.
+* **Smart Auto-Focus on Entry**: Entering Map View with a photo already selected in Grid, List, Culling, or the Editor automatically centers and zooms the map onto that image's coordinates.
+* **Full Selection, Sidebar & Editor Synchronization**:
+  * **Single-click** (with full support for `Ctrl/Cmd+Click` toggle and `Shift+Click` range selection) selects pins on the map and immediately updates the right-hand **Info & Metadata** panel—without intrusive popups covering the map canvas.
+  * **Double-click** on any photo pin or cluster opens the active image directly in the **Adjustments** editor.
+  * **Right-click** on any pin or dock card opens **RapidRAW's standard application context menu** (ratings, color labels, flags, albums, export, reset adjustments, etc.).
+
+### 2. Interactive Photographic Clusters (Stacked Photo Cards)
+Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos are rendered as **physical photo stacks** (`96×96px` front card with tilted `-3°` and `+4°` background cards) that can be browsed and manipulated directly in place:
+* **Mouse-Wheel Stack Cycling**: Hover the cursor over any cluster and scroll the mouse wheel forward or backward to flip through all photos inside the stack in real time—without zooming the map. The top-right badge dynamically switches from the total count (`12`) to the active index (`3/12`), instantly updating the front thumbnail and synchronizing the **Info & Metadata** panel.
+* **Background Card Click-to-Cycle**: Clicking directly on the tilted background cards (`-3°` or `+4°`) brings the next photo in the stack to the front.
+* **Direct Actions on the Active Cluster Photo**: Every action performed on a cluster's front card targets the currently displayed photo—single-click selection (with `z-index` foreground elevation), double-click to edit in **Adjustments**, right-click for the native context menu, or drag-and-drop to reposition.
+* **Clean Thumbnail Pins & Compact Mode**: Individual markers render as clean, border-only `96×96px` thumbnail cards (`96×106px` with directional GPS pointer) without cluttering file-format overlays, or can be toggled to **Compact Circular Pins** from the map toolbar.
+
+### 3. Interactive Geotagging & Unlocated Photos Dock
+* **Resizable "Unlocated" Dock**: A collapsible right-hand dock lists all photos in the current folder/album that lack GPS coordinates. Cards match the **Culling** view aesthetic (complete aspect-ratio thumbnails, filename labels below, and hover EXIF overlays) and scale smoothly in real time as the dock is resized.
+* **Precision Single & Batch Drag-and-Drop**: Drag one or multiple selected photos (`Ctrl/Cmd+Click`, `Shift+Click`, or *Select All*) from the Unlocated dock onto the map. Coordinates are resolved at the exact cursor tip (`clientX` / `clientY`), and dropping back onto the dock safely cancels the operation.
+* **Direct Marker Repositioning**:
+  * Drag any existing photo pin or cluster across the map (with a floating thumbnail drag avatar and multi-selection counter badge) to fine-tune or update its GPS coordinates.
+  * Alternatively, right-click anywhere on the map canvas to place or reposition all currently selected photos at that exact spot.
+
+### 4. Non-Destructive Persistence
+* **100% Immutable Source Files**: Original RAW and image binaries are never modified. GPS coordinates are persisted in RapidRAW's `.rrdata` sidecars (and cached in `.rrcache`), and automatically synchronized to standard `.xmp` sidecar files (`exif:GPSLatitude`, `exif:GPSLongitude`) when XMP sync is enabled.
+* **Multi-Step GPS Undo (`Ctrl+Z`)**: A dedicated in-map Undo history stack allows instant rollback of geotagging and repositioning actions via the map toolbar button or `Ctrl+Z` / `Cmd+Z`.
+* **Unified with "Reset Adjustments"**: GPS edits are seamlessly integrated with RapidRAW's native **Reset Adjustments** command (accessible via the application context menu or Editor Controls panel). Resetting an image's adjustments also restores its original camera EXIF GPS coordinates—or returns the photo to the **Unlocated** dock if it originally had no camera GPS.
+
+### 5. Switchable Map Styles & Zero-Cost Thumbnail Performance
+* **3 Switchable Map Layers**: Choose between **Dark OSM** (custom darkroom CSS filter tailored for photo editing), **Standard OpenStreetMap**, and **Satellite (Esri World Imagery)**, with user preference persisted in `localStorage`.
+* **Zero-Cost Session Thumbnail Reuse**: Map View reuses thumbnails already cached in memory (`mediumThumbnails` / `thumbnails`) with zero disk or Rust overhead, lazy-loading only 1 representative thumbnail per visible cluster on demand and updating clusters in $O(1)$ via `refreshClusters()`.
+* **Smooth Fractional Zoom & Coordinate Hygiene**: Smooth wheel zoom (`zoomSnap: 0.25`) and automatic rejection of invalid "Null Island" coordinates ($< 0.0001^\circ$).
+
+---
+
+## 📸 Visual Walkthrough
+
+#### 1. Native Library Switcher
+<p align="center">
+  <img src="docs/screenshots/01-library-map-switcher.png" alt="Library Display Mode Switcher with Map View" width="100%">
+</p>
+<p align="center"><em>Map View integrated into the Library display mode switcher alongside Grid, List, and Culling, with automatic zoom and centering on the selected image.</em></p>
+
+#### 2. Switchable Style Maps and ON/OFF Thumbnails 
+<p align="center">
+  <img src="docs/screenshots/02-macro-clusters-overview.png" alt="You can switch Basemaps and turn on/off Thumbnails " width="100%">
+</p>
+<p align="center"><em>Stacked photo clusters with item count badges, real-time mouse-wheel / card-click cycling (`1/N`), and instant synchronization with the right-hand Info & Metadata sidebar.</em></p>
+
+#### 3. Unlocated Photos Dock & Drag-and-Drop Geotagging
+<p align="center">
+  <img width="2313" height="1253" alt="Screenshot from 2026-10-21 11-28-17" src="https://github.com/user-attachments/assets/66d38f48-17a3-42cf-8d9b-9a9b70abb0a3" />
+</p>
+<p align="center"><em>Collapsible, resizable Unlocated dock with Culling-style thumbnail cards and precision single or multi-photo drag-and-drop placement onto the map.</em></p>
+
+#### 4.Native Context Menu
+<p align="center">
+  <img width="1650" height="1104" alt="Screenshot from 2026-10-21 13-20-21" src="https://github.com/user-attachments/assets/2a8ddb8b-a9cc-4f05-93a4-18fe7e28d1c4" />
+</p>
+<p align="center"><em>Full integration with RapidRAW's native context menu and Adjustments.</em></p>
+
+---
+
+## 🚀 Try it
+
+The download links further down are the official upstream RapidRAW releases (without Map View). You can try this fork in two ways:
+
+#### Option 1 — Build from Source
+With [Rust](https://www.rust-lang.org/tools/install) and [Node.js](https://nodejs.org/) installed:
+
+```bash
+git clone https://github.com/Binogulus/RapidRAW-map-view.git
+cd RapidRAW-map-view
+npm install
+npm run tauri build
+./src-tauri/target/release/RapidRAW
+```
+
+*(For quick development testing without creating a release bundle, you can also run `npm start` instead of `npm run tauri build`.)*
+
+#### Option 2 — Ready-Made CI Test Builds (Windows, macOS, Linux)
+Pre-built packages for **Linux** (`.AppImage`, `.deb`), **Windows** (`.exe`, `.msi`), and **macOS** (`.dmg` for Apple Silicon) are automatically compiled from the `main` branch:
+1. Open the **[Build Multi-OS (Private Test)](https://github.com/Binogulus/RapidRAW-map-view/actions/workflows/build-test-artifacts.yml?query=branch%3Amain)** workflow on GitHub Actions (requires being signed into a GitHub account to download artifacts).
+2. Click the latest successful run on `main` and scroll down to the **Artifacts** section at the bottom of the page.
+
+---
+
+Once launched, open any folder or album in the **Library** and click the **Map View** icon (4th button in the top display-mode switcher, next to *Grid*, *List*, and *Culling*).
+
+The fork shares its settings, presets, albums, and `.rrdata` sidecars with an installed RapidRAW, and only one of the two can run at a time. Please report any issues with Map View here in this fork, not upstream.
+
+### 🤝 Upstream Project & Attribution
+
+RapidRAW is created and maintained by **[Timon Käch (@CyberTimon)](https://github.com/CyberTimon/RapidRAW)**. This branch is dedicated to contributing the Map View and non-destructive geotagging workflow upstream into the official RapidRAW codebase.
+
+---
+
+<sub>Everything below is the README of RapidRAW itself.</sub>
 
 RapidRAW is a modern, high-performance alternative to Adobe Lightroom®. It delivers a simple, beautiful editing experience in a lightweight package for Windows, macOS, Linux, and Android.
 

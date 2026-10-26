@@ -2015,8 +2015,9 @@ export default function MapView(props: MapViewProps) {
     targetPaths: string[];
   } | null>(null);
 
+  const exifByPath = useLibraryStore((s) => s.exifByPath);
   const [localExifMap, setLocalExifMap] = useState<Record<string, Record<string, string>>>(() => {
-    const initial: Record<string, Record<string, string>> = {};
+    const initial: Record<string, Record<string, string>> = { ...useLibraryStore.getState().exifByPath };
     for (const img of props.imageList || []) {
       if (img.exif) {
         initial[img.path] = img.exif;
@@ -2201,7 +2202,7 @@ export default function MapView(props: MapViewProps) {
 
   useEffect(() => {
     requestedExifRef.current.clear();
-    setLocalExifMap({});
+    setLocalExifMap({ ...useLibraryStore.getState().exifByPath });
     setSelectedDockPaths(new Set());
     setRepositioningPhotoPath(null);
     setMapContextMenu(null);
@@ -2215,18 +2216,23 @@ export default function MapView(props: MapViewProps) {
       let changed = false;
       const next = { ...prev };
       for (const img of imageList) {
-        if (img.exif && next[img.path] !== img.exif) {
-          next[img.path] = img.exif;
+        const storeExif = exifByPath?.[img.path] || img.exif;
+        if (storeExif && next[img.path] !== storeExif) {
+          next[img.path] = storeExif;
           changed = true;
         }
       }
       return changed ? next : prev;
     });
-  }, [imageList]);
+  }, [imageList, exifByPath]);
 
   useEffect(() => {
     const unrequested = imageList.filter(
-      (img) => !img.exif && !localExifMap[img.path] && !requestedExifRef.current.has(img.path),
+      (img) =>
+        !img.exif &&
+        !exifByPath?.[img.path] &&
+        !localExifMap[img.path] &&
+        !requestedExifRef.current.has(img.path),
     );
     if (unrequested.length === 0) return;
 
@@ -2247,6 +2253,9 @@ export default function MapView(props: MapViewProps) {
           if (isCancelled) break;
 
           setLocalExifMap((prev) => ({ ...prev, ...chunkExif }));
+          useLibraryStore.getState().setLibrary((state) => ({
+            exifByPath: { ...state.exifByPath, ...chunkExif },
+          }));
         } catch (err) {
           console.error('Failed to read EXIF for MapView:', err);
         }
@@ -2257,14 +2266,14 @@ export default function MapView(props: MapViewProps) {
     return () => {
       isCancelled = true;
     };
-  }, [imageList.length, currentFolderPath]);
+  }, [imageList.length, currentFolderPath, exifByPath]);
 
   const { geotaggedPhotos, unlocatedPhotos, totalPhotos, geotaggedCount } = useMemo(() => {
     const items: MapPhotoItem[] = [];
     const unlocated: ImageFile[] = [];
 
     for (const img of imageList) {
-      const exifOverride = localExifMap[img.path];
+      const exifOverride = localExifMap[img.path] || exifByPath?.[img.path];
       const gps: GeoLocation | null = getImageGps(img, exifOverride);
       if (gps) {
         const filename = img.path.split(/[\\/]/).pop() || '';
@@ -2298,7 +2307,7 @@ export default function MapView(props: MapViewProps) {
       totalPhotos: imageList.length,
       geotaggedCount: items.length,
     };
-  }, [imageList, localExifMap]);
+  }, [imageList, localExifMap, exifByPath]);
 
   const applyGpsToPhotosInternal = useCallback(
     async (
@@ -2314,9 +2323,10 @@ export default function MapView(props: MapViewProps) {
         const undoItems: GpsUndoItem[] = [];
         for (const p of paths) {
           const img = imageList.find((i) => i.path === p);
-          const currentGps = getImageGps(img, localExifMap[p]);
+          const currentExif = localExifMap[p] || exifByPath?.[p];
+          const currentGps = getImageGps(img, currentExif);
           const hadNative =
-            localExifMap[p]?.HasNativeGPS === 'true' ||
+            currentExif?.HasNativeGPS === 'true' ||
             img?.exif?.HasNativeGPS === 'true';
           undoItems.push({
             path: p,
@@ -2348,7 +2358,7 @@ export default function MapView(props: MapViewProps) {
           const next = { ...prev };
           for (const p of paths) {
             if (lat !== null && lon !== null) {
-              const currentExif = next[p] || {};
+              const currentExif = next[p] || exifByPath?.[p] || {};
               const hasNative =
                 currentExif.HasNativeGPS === 'true' ||
                 imageList.find((i) => i.path === p)?.exif?.HasNativeGPS === 'true';
@@ -2356,8 +2366,8 @@ export default function MapView(props: MapViewProps) {
                 ? { IsGpsModified: 'true' }
                 : {};
               next[p] = { ...currentExif, ...updates, ...modUpdate };
-            } else if (next[p]) {
-              const cleaned = { ...next[p] };
+            } else if (next[p] || exifByPath?.[p]) {
+              const cleaned = { ...(next[p] || exifByPath?.[p] || {}) };
               delete cleaned.GPSLatitude;
               delete cleaned.GPSLatitudeRef;
               delete cleaned.GPSLongitude;
@@ -2377,31 +2387,33 @@ export default function MapView(props: MapViewProps) {
 
         const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
         const pathsNormSet = new Set(paths.map(normalizePath));
-        useLibraryStore.getState().setLibrary((state) => ({
-          imageList: state.imageList.map((img) => {
+        useLibraryStore.getState().setLibrary((state) => {
+          const nextExifByPath = { ...state.exifByPath };
+          const nextImageList = state.imageList.map((img) => {
             if (pathsNormSet.has(normalizePath(img.path))) {
+              const baseExif = nextExifByPath[img.path] || img.exif || localExifMap[img.path];
               if (lat !== null && lon !== null) {
-                const hasNative =
-                  img.exif?.HasNativeGPS === 'true' ||
-                  localExifMap[img.path]?.HasNativeGPS === 'true';
+                const hasNative = baseExif?.HasNativeGPS === 'true';
                 const modUpdate = hasNative ? { IsGpsModified: 'true' } : {};
-                return { ...img, is_edited: true, exif: { ...(img.exif || {}), ...updates, ...modUpdate } };
-              } else if (img.exif) {
-                const cleaned = { ...img.exif };
+                const updatedExif = { ...(baseExif || {}), ...updates, ...modUpdate };
+                nextExifByPath[img.path] = updatedExif;
+                return { ...img, is_edited: true, exif: updatedExif };
+              } else if (baseExif) {
+                const cleaned = { ...baseExif };
                 delete cleaned.GPSLatitude;
                 delete cleaned.GPSLatitudeRef;
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
-                const hadNative =
-                  img.exif?.HasNativeGPS === 'true' ||
-                  localExifMap[img.path]?.HasNativeGPS === 'true';
+                const hadNative = baseExif.HasNativeGPS === 'true';
+                nextExifByPath[img.path] = cleaned;
                 return { ...img, is_edited: hadNative ? true : img.is_edited, exif: cleaned };
               }
             }
             return img;
-          }),
-        }));
+          });
+          return { imageList: nextImageList, exifByPath: nextExifByPath };
+        });
 
         useEditorStore.getState().setEditor((state) => {
           if (!state.selectedImage || !pathsNormSet.has(normalizePath(state.selectedImage.path))) {
@@ -2410,7 +2422,8 @@ export default function MapView(props: MapViewProps) {
           if (lat !== null && lon !== null) {
             const hasNative =
               state.selectedImage.exif?.HasNativeGPS === 'true' ||
-              localExifMap[state.selectedImage.path]?.HasNativeGPS === 'true';
+              localExifMap[state.selectedImage.path]?.HasNativeGPS === 'true' ||
+              exifByPath?.[state.selectedImage.path]?.HasNativeGPS === 'true';
             const modUpdate = hasNative ? { IsGpsModified: 'true' } : {};
             return {
               selectedImage: {
@@ -2428,7 +2441,8 @@ export default function MapView(props: MapViewProps) {
             delete cleaned.IsGpsModified;
             const hadNative =
               state.selectedImage.exif?.HasNativeGPS === 'true' ||
-              localExifMap[state.selectedImage.path]?.HasNativeGPS === 'true';
+              localExifMap[state.selectedImage.path]?.HasNativeGPS === 'true' ||
+              exifByPath?.[state.selectedImage.path]?.HasNativeGPS === 'true';
             return {
               selectedImage: {
                 ...state.selectedImage,
@@ -2445,7 +2459,7 @@ export default function MapView(props: MapViewProps) {
         } else if (lat !== null) {
           const hadPreviousGps = paths.some((p) => {
             const img = imageList.find((i) => i.path === p);
-            return Boolean(getImageGps(img, localExifMap[p]));
+            return Boolean(getImageGps(img, localExifMap[p] || exifByPath?.[p]));
           });
 
           if (hadPreviousGps) {
@@ -2490,7 +2504,7 @@ export default function MapView(props: MapViewProps) {
         );
       }
     },
-    [t, imageList, localExifMap],
+    [t, imageList, localExifMap, exifByPath],
   );
 
   const applyGpsToPhotos = useCallback(
@@ -2541,7 +2555,8 @@ export default function MapView(props: MapViewProps) {
       const targetNorm = normalizePath(path);
 
       const img = imageList.find((i) => normalizePath(i.path) === targetNorm);
-      const currentGps = getImageGps(img || ({ path, is_raw: false } as ImageFile), localExifMap[path]);
+      const currentExif = localExifMap[path] || exifByPath?.[path];
+      const currentGps = getImageGps(img || ({ path, is_raw: false } as ImageFile), currentExif);
       if (currentGps) {
         undoStackRef.current.push({
           items: [
@@ -2550,7 +2565,7 @@ export default function MapView(props: MapViewProps) {
               previousLat: currentGps.lat,
               previousLon: currentGps.lon,
               hadNativeGps:
-                localExifMap[path]?.HasNativeGPS === 'true' ||
+                currentExif?.HasNativeGPS === 'true' ||
                 img?.exif?.HasNativeGPS === 'true',
             },
           ],
@@ -2577,7 +2592,13 @@ export default function MapView(props: MapViewProps) {
 
           setLocalExifMap((prev) => {
             const next = { ...prev };
-            const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
+            const current = next[path]
+              ? { ...next[path] }
+              : exifByPath?.[path]
+                ? { ...exifByPath[path] }
+                : img?.exif
+                  ? { ...img.exif }
+                  : {};
             delete current.IsGpsModified;
             next[path] = { ...current, ...updates };
             if (targetNorm !== path) {
@@ -2586,16 +2607,24 @@ export default function MapView(props: MapViewProps) {
             return next;
           });
 
-          useLibraryStore.getState().setLibrary((state) => ({
-            imageList: state.imageList.map((i) => {
+          useLibraryStore.getState().setLibrary((state) => {
+            const nextExifByPath = { ...state.exifByPath };
+            const nextImageList = state.imageList.map((i) => {
               if (normalizePath(i.path) === targetNorm) {
-                const currentExif = i.exif ? { ...i.exif } : {};
-                delete currentExif.IsGpsModified;
-                return { ...i, is_edited: false, exif: { ...currentExif, ...updates } };
+                const currentExifMap = nextExifByPath[i.path]
+                  ? { ...nextExifByPath[i.path] }
+                  : i.exif
+                    ? { ...i.exif }
+                    : {};
+                delete currentExifMap.IsGpsModified;
+                const updatedExif = { ...currentExifMap, ...updates };
+                nextExifByPath[i.path] = updatedExif;
+                return { ...i, is_edited: false, exif: updatedExif };
               }
               return i;
-            }),
-          }));
+            });
+            return { imageList: nextImageList, exifByPath: nextExifByPath };
+          });
 
           useEditorStore.getState().setEditor((state) => {
             if (!state.selectedImage || normalizePath(state.selectedImage.path) !== targetNorm) {
@@ -2621,7 +2650,13 @@ export default function MapView(props: MapViewProps) {
         } else {
           setLocalExifMap((prev) => {
             const next = { ...prev };
-            const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
+            const current = next[path]
+              ? { ...next[path] }
+              : exifByPath?.[path]
+                ? { ...exifByPath[path] }
+                : img?.exif
+                  ? { ...img.exif }
+                  : {};
             delete current.GPSLatitude;
             delete current.GPSLatitudeRef;
             delete current.GPSLongitude;
@@ -2635,21 +2670,28 @@ export default function MapView(props: MapViewProps) {
             return next;
           });
 
-          useLibraryStore.getState().setLibrary((state) => ({
-            imageList: state.imageList.map((i) => {
+          useLibraryStore.getState().setLibrary((state) => {
+            const nextExifByPath = { ...state.exifByPath };
+            const nextImageList = state.imageList.map((i) => {
               if (normalizePath(i.path) === targetNorm) {
-                const cleaned = i.exif ? { ...i.exif } : {};
+                const cleaned = nextExifByPath[i.path]
+                  ? { ...nextExifByPath[i.path] }
+                  : i.exif
+                    ? { ...i.exif }
+                    : {};
                 delete cleaned.GPSLatitude;
                 delete cleaned.GPSLatitudeRef;
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
                 cleaned.HasNativeGPS = 'false';
+                nextExifByPath[i.path] = cleaned;
                 return { ...i, is_edited: false, exif: cleaned };
               }
               return i;
-            }),
-          }));
+            });
+            return { imageList: nextImageList, exifByPath: nextExifByPath };
+          });
 
           useEditorStore.getState().setEditor((state) => {
             if (!state.selectedImage || normalizePath(state.selectedImage.path) !== targetNorm) {

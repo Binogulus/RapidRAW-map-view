@@ -201,7 +201,7 @@ pub async fn apply_adjustments_to_paths(
             crate::metadata::sidecar::fill_missing_exif(metadata, source_path);
 
             if metadata.adjustments.is_null() {
-                metadata.adjustments = default_adjustments();
+                metadata.adjustments = default_adjustments(source_path);
             }
 
             let mut pasted = adjustments.clone();
@@ -323,14 +323,20 @@ fn revert_gps_in_metadata_and_cache(
 #[tauri::command]
 pub async fn reset_adjustments_for_paths(
     paths: Vec<String>,
+    to_neutral: Option<bool>,
     app_handle: AppHandle,
 ) -> Result<HashMap<String, Option<(f64, f64)>>, String> {
+    let reset_to = if to_neutral.unwrap_or(false) {
+        crate::render::adjustment_utils::neutral_adjustments()
+    } else {
+        Value::Null
+    };
     let result = tauri::async_runtime::spawn_blocking(move || {
         let gps_results = std::sync::Mutex::new(HashMap::new());
         let gps_results_ref = &gps_results;
         update_sidecars_and_thumbnails(paths, app_handle, |path, source_path, metadata| {
             crate::metadata::sidecar::fill_missing_exif(metadata, source_path);
-            metadata.adjustments = default_adjustments();
+            metadata.adjustments = reset_to.clone();
             let gps_coords = revert_gps_in_metadata_and_cache(source_path, metadata);
             gps_results_ref
                 .lock()
@@ -448,14 +454,15 @@ pub async fn apply_auto_lens_correction_to_paths(
             crate::metadata::sidecar::fill_missing_exif(metadata, source_path);
 
             if metadata.adjustments.is_null() {
-                metadata.adjustments = default_adjustments();
+                metadata.adjustments = default_adjustments(source_path);
             }
 
             if let Some(obj) = metadata.adjustments.as_object_mut() {
-                obj.insert("lensCorrectionMode".to_string(), serde_json::json!("auto"));
-                obj.insert("lensDistortionEnabled".to_string(), serde_json::json!(true));
-                obj.insert("lensTcaEnabled".to_string(), serde_json::json!(true));
-                obj.insert("lensVignetteEnabled".to_string(), serde_json::json!(true));
+                for (key, value) in
+                    crate::adjustments::develop_defaults::auto_lens_correction_adjustments()
+                {
+                    obj.insert(key.to_string(), value);
+                }
             }
         });
     })
@@ -517,7 +524,7 @@ async fn update_sidecars_from_images(
                     &source_path,
                     |metadata| {
                         if metadata.adjustments.is_null() {
-                            metadata.adjustments = default_adjustments();
+                            metadata.adjustments = default_adjustments(&source_path);
                         }
                         update(
                             &image,
@@ -905,7 +912,8 @@ pub fn set_gps_for_paths(
 
         let is_raw = crate::decode::formats::is_raw_file(&source_path);
         let tm_override = resolve_tonemapper_override(&settings, is_raw);
-        let is_adj_edited = is_image_edited(&metadata.adjustments, is_raw, tm_override);
+        let is_adj_edited =
+            is_image_edited(&metadata.adjustments, &source_path, is_raw, tm_override);
         let is_gps_edited = metadata
             .exif
             .as_ref()
@@ -966,7 +974,8 @@ pub fn revert_gps_for_paths(
 
                 let is_raw = crate::decode::formats::is_raw_file(&source_path);
                 let tm_override = resolve_tonemapper_override(&settings, is_raw);
-                let is_adj_edited = is_image_edited(&metadata.adjustments, is_raw, tm_override);
+                let is_adj_edited =
+                    is_image_edited(&metadata.adjustments, &source_path, is_raw, tm_override);
                 let needs_ai =
                     crate::ai::jobs::needs_generation(&metadata.adjustments, &source_path);
 
@@ -1009,6 +1018,11 @@ pub async fn load_metadata(path: String, app_handle: AppHandle) -> Result<ImageM
                     sync_metadata_from_xmp(&source_path, &sidecar_path, current);
                 });
         }
+
+        crate::adjustments::develop_defaults::resolve_in_place(
+            &mut metadata.adjustments,
+            &source_path,
+        );
 
         if crate::ai::jobs::has_ai_results(&metadata.adjustments)
             && let Some(source_id) = crate::ai::jobs::source_id(&source_path)

@@ -10,11 +10,10 @@ import { useUIStore } from '../../store/useUIStore';
 
 const ALL_COLORS = [...COLOR_LABELS, { name: 'none', color: '#9ca3af' }];
 
-export function useQuickFilterToggle() {
-  const isExpanded = useUIStore((s) => Boolean(s.uiVisibility.quickFilter));
+export function useQuickFilterToggle(key: 'quickFilter' | 'dockedQuickFilter') {
+  const isExpanded = useUIStore((s) => Boolean(s.uiVisibility[key]));
   const setUI = useUIStore((s) => s.setUI);
-  const toggle = () =>
-    setUI((s) => ({ uiVisibility: { ...s.uiVisibility, quickFilter: !s.uiVisibility.quickFilter } }));
+  const toggle = () => setUI((s) => ({ uiVisibility: { ...s.uiVisibility, [key]: !s.uiVisibility[key] } }));
   return { isExpanded, toggle };
 }
 

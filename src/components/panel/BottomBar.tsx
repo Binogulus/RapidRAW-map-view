@@ -176,8 +176,6 @@ export default function BottomBar({
   const showLeftPanelToggle = layoutMode === 'full';
   const showRightPanelToggle = layoutMode === 'full' || layoutMode === 'wide';
   const showFilmstripTab = layoutMode !== 'compact' && hasBottomFilmstrip;
-  const showQuickFilter = isLibraryView || !(layoutMode === 'full' && isDocked);
-
   const toggleLeft = () =>
     setUI((s) => {
       const isOpening = !s.uiVisibility.leftPanel;
@@ -226,7 +224,7 @@ export default function BottomBar({
   const total = totalImages ?? 0;
   const showSelectionCounter = numSelected > 1;
 
-  const { isExpanded: isFilterExpanded, toggle: toggleQuickFilter } = useQuickFilterToggle();
+  const { isExpanded: isFilterExpanded, toggle: toggleQuickFilter } = useQuickFilterToggle('quickFilter');
   const currentHeight = filmstripHeight ?? 120;
   const isCollapsed = !isFilmstripVisible;
   const effectiveHeight = isFilmstripVisible ? currentHeight : 0;
@@ -452,41 +450,35 @@ export default function BottomBar({
             </button>
           </div>
 
-          {showQuickFilter && (
-            <>
-              <div className="h-5 w-px bg-surface"></div>
+          <div className="h-5 w-px bg-surface"></div>
 
-              <div
-                className={clsx(
-                  'flex items-center transition-all duration-300',
-                  isFilterExpanded ? 'bg-surface rounded-md' : 'bg-transparent',
-                )}
-              >
-                <button
-                  className={clsx(
-                    'relative w-8 h-8 flex items-center justify-center rounded-md transition-colors shrink-0',
-                    isFilterExpanded
-                      ? 'text-text-primary'
-                      : 'text-text-secondary hover:bg-surface hover:text-text-primary',
-                  )}
-                  onClick={toggleQuickFilter}
-                  data-tooltip={t('ui.bottomBar.tooltips.quickFilter')}
-                >
-                  <Filter size={18} />
-                </button>
+          <div
+            className={clsx(
+              'flex items-center transition-all duration-300',
+              isFilterExpanded ? 'bg-surface rounded-md' : 'bg-transparent',
+            )}
+          >
+            <button
+              className={clsx(
+                'relative w-8 h-8 flex items-center justify-center rounded-md transition-colors shrink-0',
+                isFilterExpanded ? 'text-text-primary' : 'text-text-secondary hover:bg-surface hover:text-text-primary',
+              )}
+              onClick={toggleQuickFilter}
+              data-tooltip={t('ui.bottomBar.tooltips.quickFilter')}
+            >
+              <Filter size={18} />
+            </button>
 
-                <div
-                  className={clsx(
-                    'flex items-center transition-all duration-300 ease-in-out overflow-hidden',
-                    // Increased max-w so stars + flags + colors all fit without clipping
-                    isFilterExpanded ? 'max-w-xl opacity-100 pr-2 ml-1' : 'max-w-0 opacity-0 pr-0 ml-0',
-                  )}
-                >
-                  <QuickFilterControls className="flex items-center gap-3 whitespace-nowrap" />
-                </div>
-              </div>
-            </>
-          )}
+            <div
+              className={clsx(
+                'flex items-center transition-all duration-300 ease-in-out overflow-hidden',
+                // Increased max-w so stars + flags + colors all fit without clipping
+                isFilterExpanded ? 'max-w-xl opacity-100 pr-2 ml-1' : 'max-w-0 opacity-0 pr-0 ml-0',
+              )}
+            >
+              <QuickFilterControls className="flex items-center gap-3 whitespace-nowrap" />
+            </div>
+          </div>
 
           <div
             className={clsx(

@@ -92,7 +92,7 @@ export default function DockedFilmstrip({
   const columns = useUIStore((s) => s.filmstripColumns);
   const showFileInfo = useUIStore((s) => s.filmstripShowFileInfo);
   const setUI = useUIStore((s) => s.setUI);
-  const { isExpanded: isFilterExpanded, toggle: toggleQuickFilter } = useQuickFilterToggle();
+  const { isExpanded: isFilterExpanded, toggle: toggleQuickFilter } = useQuickFilterToggle('dockedQuickFilter');
   const [listHandle, setListHandle] = useListCallbackRef();
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });

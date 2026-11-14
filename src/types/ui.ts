@@ -63,6 +63,7 @@ export interface UiVisibility {
   leftPanel: boolean;
   rightPanel: boolean;
   quickFilter?: boolean;
+  dockedQuickFilter?: boolean;
 }
 
 export interface CollapsibleSectionsState {
